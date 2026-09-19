@@ -9,60 +9,12 @@ class OdometerDatabaseHelper(
     context: Context
 ) : SQLiteOpenHelper(
     context,
-    DATABASE_NAME,
+    "background_odometer.db",
     null,
-    DATABASE_VERSION
+    1
 ) {
 
-    companion object {
-
-        private const val DATABASE_NAME =
-            "background_odometer.db"
-
-        private const val DATABASE_VERSION = 1
-
-        private const val TABLE_SETTINGS =
-            "settings"
-
-        private const val TABLE_TRIPS =
-            "trips"
-
-        private const val TABLE_POINTS =
-            "track_points"
-
-        private const val TABLE_DAYS =
-            "days"
-
-        private const val TABLE_FUEL =
-            "fuel"
-
-        private const val SETTINGS_ID = "id"
-
-        private const val TOTAL_ODOMETER =
-            "total_odometer"
-
-        private const val SPEED_THRESHOLD =
-            "speed_threshold"
-
-        private const val TANK_CAPACITY =
-            "tank_capacity"
-
-        private const val RESERVE_FUEL =
-            "reserve_fuel"
-
-        private const val ALERT_ENABLED =
-            "alert_enabled"
-
-        private const val ALERT_TARGET =
-            "alert_target"
-
-        private const val ALERT_FIRED =
-            "alert_fired"
-    }
-
-    override fun onCreate(
-        db: SQLiteDatabase
-    ) {
+    override fun onCreate(db: SQLiteDatabase) {
 
         db.execSQL(
             """
@@ -70,11 +22,9 @@ class OdometerDatabaseHelper(
                 id INTEGER PRIMARY KEY,
                 total_odometer REAL NOT NULL DEFAULT 0,
                 speed_threshold REAL NOT NULL DEFAULT 6,
-                tank_capacity REAL NOT NULL DEFAULT 0,
-                reserve_fuel REAL NOT NULL DEFAULT 0,
-                alert_enabled INTEGER NOT NULL DEFAULT 0,
-                alert_target REAL NOT NULL DEFAULT 0,
-                alert_fired INTEGER NOT NULL DEFAULT 0
+                distance_alert_enabled INTEGER NOT NULL DEFAULT 0,
+                distance_alert_target REAL NOT NULL DEFAULT 0,
+                distance_alert_fired INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent()
         )
@@ -106,83 +56,22 @@ class OdometerDatabaseHelper(
                 longitude REAL NOT NULL,
                 time INTEGER NOT NULL,
                 speed REAL NOT NULL DEFAULT 0,
-                accuracy REAL NOT NULL DEFAULT 0,
-                FOREIGN KEY(trip_id)
-                    REFERENCES trips(id)
-                    ON DELETE CASCADE
-            )
-            """.trimIndent()
-        )
-
-        db.execSQL(
-            """
-            CREATE TABLE days (
-                date TEXT PRIMARY KEY,
-                place TEXT,
-                distance REAL NOT NULL DEFAULT 0,
-                fuel REAL NOT NULL DEFAULT 0,
-                trip_count INTEGER NOT NULL DEFAULT 0
-            )
-            """.trimIndent()
-        )
-
-        db.execSQL(
-            """
-            CREATE TABLE fuel (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date INTEGER NOT NULL,
-                litres REAL NOT NULL,
-                odometer REAL NOT NULL,
-                price REAL NOT NULL DEFAULT 0,
-                note TEXT
+                accuracy REAL NOT NULL DEFAULT 0
             )
             """.trimIndent()
         )
 
         val values = ContentValues()
 
-        values.put(
-            SETTINGS_ID,
-            1
-        )
-
-        values.put(
-            TOTAL_ODOMETER,
-            0.0
-        )
-
-        values.put(
-            SPEED_THRESHOLD,
-            6.0
-        )
-
-        values.put(
-            TANK_CAPACITY,
-            0.0
-        )
-
-        values.put(
-            RESERVE_FUEL,
-            0.0
-        )
-
-        values.put(
-            ALERT_ENABLED,
-            0
-        )
-
-        values.put(
-            ALERT_TARGET,
-            0.0
-        )
-
-        values.put(
-            ALERT_FIRED,
-            0
-        )
+        values.put("id", 1)
+        values.put("total_odometer", 0.0)
+        values.put("speed_threshold", 6.0)
+        values.put("distance_alert_enabled", 0)
+        values.put("distance_alert_target", 0.0)
+        values.put("distance_alert_fired", 0)
 
         db.insert(
-            TABLE_SETTINGS,
+            "settings",
             null,
             values
         )
@@ -193,23 +82,16 @@ class OdometerDatabaseHelper(
         oldVersion: Int,
         newVersion: Int
     ) {
-        // Future migrations go here.
     }
 
     fun getTotalOdometer(): Double {
 
-        val cursor = readableDatabase.query(
-            TABLE_SETTINGS,
-            arrayOf(TOTAL_ODOMETER),
-            "id = 1",
-            null,
-            null,
-            null,
+        val cursor = readableDatabase.rawQuery(
+            "SELECT total_odometer FROM settings WHERE id=1",
             null
         )
 
         return cursor.use {
-
             if (it.moveToFirst()) {
                 it.getDouble(0)
             } else {
@@ -218,50 +100,55 @@ class OdometerDatabaseHelper(
         }
     }
 
-    fun setTotalOdometer(
-        value: Double
+    fun addToOdometer(
+        distanceKm: Double
     ) {
+
+        if (distanceKm <= 0) return
+
+        val newValue =
+            getTotalOdometer() + distanceKm
 
         val values = ContentValues()
 
         values.put(
-            TOTAL_ODOMETER,
-            maxOf(0.0, value)
+            "total_odometer",
+            newValue
         )
 
         writableDatabase.update(
-            TABLE_SETTINGS,
+            "settings",
             values,
-            "id = 1",
+            "id=1",
             null
         )
     }
 
-    fun addToOdometer(
-        value: Double
-    ) {
+    fun clearTotalOdometer() {
 
-        if (value <= 0) return
+        val values = ContentValues()
 
-        setTotalOdometer(
-            getTotalOdometer() + value
+        values.put(
+            "total_odometer",
+            0.0
+        )
+
+        writableDatabase.update(
+            "settings",
+            values,
+            "id=1",
+            null
         )
     }
 
     fun getSpeedThreshold(): Double {
 
-        val cursor = readableDatabase.query(
-            TABLE_SETTINGS,
-            arrayOf(SPEED_THRESHOLD),
-            "id = 1",
-            null,
-            null,
-            null,
+        val cursor = readableDatabase.rawQuery(
+            "SELECT speed_threshold FROM settings WHERE id=1",
             null
         )
 
         return cursor.use {
-
             if (it.moveToFirst()) {
                 it.getDouble(0)
             } else {
@@ -271,106 +158,26 @@ class OdometerDatabaseHelper(
     }
 
     fun setSpeedThreshold(
-        value: Double
+        threshold: Double
     ) {
 
         val values = ContentValues()
 
         values.put(
-            SPEED_THRESHOLD,
-            maxOf(0.0, value)
+            "speed_threshold",
+            maxOf(0.0, threshold)
         )
 
         writableDatabase.update(
-            TABLE_SETTINGS,
+            "settings",
             values,
-            "id = 1",
-            null
-        )
-    }
-
-    fun getTankCapacity(): Double {
-
-        return getSettingDouble(
-            TANK_CAPACITY
-        )
-    }
-
-    fun setTankCapacity(
-        value: Double
-    ) {
-
-        setSettingDouble(
-            TANK_CAPACITY,
-            value
-        )
-    }
-
-    fun getReserveFuel(): Double {
-
-        return getSettingDouble(
-            RESERVE_FUEL
-        )
-    }
-
-    fun setReserveFuel(
-        value: Double
-    ) {
-
-        setSettingDouble(
-            RESERVE_FUEL,
-            value
-        )
-    }
-
-    private fun getSettingDouble(
-        column: String
-    ): Double {
-
-        val cursor =
-            readableDatabase.query(
-                TABLE_SETTINGS,
-                arrayOf(column),
-                "id = 1",
-                null,
-                null,
-                null,
-                null
-            )
-
-        return cursor.use {
-
-            if (it.moveToFirst()) {
-                it.getDouble(0)
-            } else {
-                0.0
-            }
-        }
-    }
-
-    private fun setSettingDouble(
-        column: String,
-        value: Double
-    ) {
-
-        val values = ContentValues()
-
-        values.put(
-            column,
-            maxOf(0.0, value)
-        )
-
-        writableDatabase.update(
-            TABLE_SETTINGS,
-            values,
-            "id = 1",
+            "id=1",
             null
         )
     }
 
     fun createTrip(
-        startTime: Long,
-        manual: Boolean = false
+        startTime: Long
     ): Long {
 
         val values = ContentValues()
@@ -380,13 +187,8 @@ class OdometerDatabaseHelper(
             startTime
         )
 
-        values.put(
-            "manual",
-            if (manual) 1 else 0
-        )
-
         return writableDatabase.insert(
-            TABLE_TRIPS,
+            "trips",
             null,
             values
         )
@@ -434,7 +236,7 @@ class OdometerDatabaseHelper(
         )
 
         writableDatabase.insert(
-            TABLE_POINTS,
+            "track_points",
             null,
             values
         )
@@ -445,8 +247,7 @@ class OdometerDatabaseHelper(
         distance: Double,
         averageSpeed: Double,
         maxSpeed: Double,
-        endTime: Long,
-        routeJson: String?
+        endTime: Long
     ) {
 
         val values = ContentValues()
@@ -472,41 +273,34 @@ class OdometerDatabaseHelper(
         )
 
         values.put(
-            "route_json",
-            routeJson
-        )
-
-        values.put(
             "completed",
             1
         )
 
         writableDatabase.update(
-            TABLE_TRIPS,
+            "trips",
             values,
-            "id = ?",
+            "id=?",
             arrayOf(
                 tripId.toString()
             )
         )
     }
 
-    fun getActiveTripId(): Long? {
+    fun getActiveTrip(): Long? {
 
-        val cursor =
-            readableDatabase.query(
-                TABLE_TRIPS,
-                arrayOf("id"),
-                "completed = 0",
-                null,
-                null,
-                null,
-                "id DESC",
-                "1"
-            )
+        val cursor = readableDatabase.rawQuery(
+            """
+            SELECT id
+            FROM trips
+            WHERE completed=0
+            ORDER BY id DESC
+            LIMIT 1
+            """.trimIndent(),
+            null
+        )
 
         return cursor.use {
-
             if (it.moveToFirst()) {
                 it.getLong(0)
             } else {
@@ -515,226 +309,107 @@ class OdometerDatabaseHelper(
         }
     }
 
-    fun deleteTrip(
-        tripId: Long
+    fun setDistanceAlert(
+        enabled: Boolean,
+        target: Double
     ) {
-
-        writableDatabase.delete(
-            TABLE_POINTS,
-            "trip_id = ?",
-            arrayOf(
-                tripId.toString()
-            )
-        )
-
-        writableDatabase.delete(
-            TABLE_TRIPS,
-            "id = ?",
-            arrayOf(
-                tripId.toString()
-            )
-        )
-    }
-
-    fun addFuel(
-        date: Long,
-        litres: Double,
-        odometer: Double,
-        price: Double,
-        note: String
-    ): Long {
 
         val values = ContentValues()
 
         values.put(
-            "date",
-            date
+            "distance_alert_enabled",
+            if (enabled) 1 else 0
         )
 
         values.put(
-            "litres",
-            litres
+            "distance_alert_target",
+            target
         )
 
         values.put(
-            "odometer",
-            odometer
+            "distance_alert_fired",
+            0
         )
 
-        values.put(
-            "price",
-            price
-        )
-
-        values.put(
-            "note",
-            note
-        )
-
-        return writableDatabase.insert(
-            TABLE_FUEL,
-            null,
-            values
+        writableDatabase.update(
+            "settings",
+            values,
+            "id=1",
+            null
         )
     }
 
-    fun getFuelBasedMileage(): Double {
+    fun isDistanceAlertEnabled(): Boolean {
 
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT
-                    odometer,
-                    litres
-                FROM fuel
-                ORDER BY odometer ASC
-                """.trimIndent(),
-                null
-            )
+        return getIntSetting(
+            "distance_alert_enabled"
+        ) == 1
+    }
 
-        cursor.use {
+    fun getDistanceAlertTarget(): Double {
 
-            if (it.count < 2) {
-                return 0.0
+        return getDoubleSetting(
+            "distance_alert_target"
+        )
+    }
+
+    fun isDistanceAlertFired(): Boolean {
+
+        return getIntSetting(
+            "distance_alert_fired"
+        ) == 1
+    }
+
+    fun markDistanceAlertFired() {
+
+        val values = ContentValues()
+
+        values.put(
+            "distance_alert_fired",
+            1
+        )
+
+        writableDatabase.update(
+            "settings",
+            values,
+            "id=1",
+            null
+        )
+    }
+
+    private fun getIntSetting(
+        column: String
+    ): Int {
+
+        val cursor = readableDatabase.rawQuery(
+            "SELECT $column FROM settings WHERE id=1",
+            null
+        )
+
+        return cursor.use {
+            if (it.moveToFirst()) {
+                it.getInt(0)
+            } else {
+                0
             }
+        }
+    }
 
-            var previousOdometer =
-                0.0
+    private fun getDoubleSetting(
+        column: String
+    ): Double {
 
-            var previousFuel =
-                0.0
+        val cursor = readableDatabase.rawQuery(
+            "SELECT $column FROM settings WHERE id=1",
+            null
+        )
 
-            var totalDistance =
-                0.0
-
-            var totalFuel =
-                0.0
-
-            var first = true
-
-            while (it.moveToNext()) {
-
-                val odometer =
-                    it.getDouble(0)
-
-                val litres =
-                    it.getDouble(1)
-
-                if (first) {
-
-                    previousOdometer =
-                        odometer
-
-                    previousFuel =
-                        litres
-
-                    first = false
-
-                    continue
-                }
-
-                val distance =
-                    odometer -
-                        previousOdometer
-
-                if (distance > 0 &&
-                    litres > 0
-                ) {
-
-                    totalDistance +=
-                        distance
-
-                    totalFuel +=
-                        litres
-                }
-
-                previousOdometer =
-                    odometer
-
-                previousFuel =
-                    litres
-            }
-
-            return if (
-                totalFuel > 0
-            ) {
-                totalDistance /
-                    totalFuel
+        return cursor.use {
+            if (it.moveToFirst()) {
+                it.getDouble(0)
             } else {
                 0.0
             }
         }
-    }
-
-    fun getReserveRange(): Double {
-
-        val mileage =
-            getFuelBasedMileage()
-
-        val reserve =
-            getReserveFuel()
-
-        if (
-            mileage <= 0 ||
-            reserve <= 0
-        ) {
-            return 0.0
-        }
-
-        return mileage *
-            reserve
-    }
-
-    fun getFullTankRange(): Double {
-
-        val mileage =
-            getFuelBasedMileage()
-
-        val tank =
-            getTankCapacity()
-
-        if (
-            mileage <= 0 ||
-            tank <= 0
-        ) {
-            return 0.0
-        }
-
-        return mileage *
-            tank
-    }
-
-    fun clearTotalOnly() {
-
-        setTotalOdometer(0.0)
-    }
-
-    fun deleteAllData() {
-
-        writableDatabase.delete(
-            TABLE_POINTS,
-            null,
-            null
-        )
-
-        writableDatabase.delete(
-            TABLE_TRIPS,
-            null,
-            null
-        )
-
-        writableDatabase.delete(
-            TABLE_DAYS,
-            null,
-            null
-        )
-
-        writableDatabase.delete(
-            TABLE_FUEL,
-            null,
-            null
-        )
-
-        clearTotalOnly()
     }
 }
