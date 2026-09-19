@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -31,31 +32,44 @@ class MainActivity : Activity() {
 
     private var trackingActive = false
 
-    private val receiver = object : BroadcastReceiver() {
+    companion object {
 
-        override fun onReceive(
-            context: Context?,
-            intent: Intent?
-        ) {
+        private const val TIFFANY =
+            "#00BCD4"
 
-            if (
-                intent?.action ==
-                LocationTrackingService.ACTION_SPEED_UPDATE
+        private const val DARK_TIFFANY =
+            "#07383E"
+
+        private const val BUTTON_DARK =
+            "#151515"
+    }
+
+    private val receiver =
+        object : BroadcastReceiver() {
+
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?
             ) {
 
-                val speed =
-                    intent.getDoubleExtra(
-                        LocationTrackingService.EXTRA_SPEED,
-                        0.0
-                    )
+                if (
+                    intent?.action ==
+                    LocationTrackingService.ACTION_SPEED_UPDATE
+                ) {
 
-                speedText.text =
-                    "%.1f km/h".format(speed)
+                    val speed =
+                        intent.getDoubleExtra(
+                            LocationTrackingService.EXTRA_SPEED,
+                            0.0
+                        )
 
-                refreshTotal()
+                    speedText.text =
+                        "%.1f km/h".format(speed)
+
+                    refreshTotal()
+                }
             }
         }
-    }
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -73,6 +87,10 @@ class MainActivity : Activity() {
         refreshTotal()
     }
 
+    // =====================================================
+    // MAIN INTERFACE
+    // =====================================================
+
     private fun buildInterface() {
 
         val scrollView =
@@ -82,7 +100,8 @@ class MainActivity : Activity() {
             Color.BLACK
         )
 
-        scrollView.isFillViewport = true
+        scrollView.isFillViewport =
+            true
 
         val root =
             LinearLayout(this)
@@ -93,16 +112,20 @@ class MainActivity : Activity() {
         root.gravity =
             Gravity.CENTER_HORIZONTAL
 
+        /*
+         * Extra top padding keeps the UI below the
+         * Android status bar on newer Android versions.
+         */
         root.setPadding(
             24,
-            30,
+            65,
             24,
             40
         )
 
-        // -------------------------------------------------
+        // =================================================
         // TITLE
-        // -------------------------------------------------
+        // =================================================
 
         val title =
             TextView(this)
@@ -110,7 +133,8 @@ class MainActivity : Activity() {
         title.text =
             "BACKGROUND ODOMETER"
 
-        title.textSize = 24f
+        title.textSize =
+            24f
 
         title.setTextColor(
             Color.WHITE
@@ -127,11 +151,11 @@ class MainActivity : Activity() {
             wrapContentParams()
         )
 
-        addSpace(root, 20)
+        addSpace(root, 24)
 
-        // -------------------------------------------------
-        // TOTAL LABEL
-        // -------------------------------------------------
+        // =================================================
+        // TOTAL ODOMETER
+        // =================================================
 
         val totalLabel =
             TextView(this)
@@ -139,10 +163,11 @@ class MainActivity : Activity() {
         totalLabel.text =
             "TOTAL ODOMETER"
 
-        totalLabel.textSize = 15f
+        totalLabel.textSize =
+            15f
 
         totalLabel.setTextColor(
-            Color.rgb(0, 188, 212)
+            Color.parseColor(TIFFANY)
         )
 
         totalLabel.typeface =
@@ -156,11 +181,7 @@ class MainActivity : Activity() {
             wrapContentParams()
         )
 
-        addSpace(root, 5)
-
-        // -------------------------------------------------
-        // TOTAL VALUE
-        // -------------------------------------------------
+        addSpace(root, 4)
 
         totalText =
             TextView(this)
@@ -168,7 +189,8 @@ class MainActivity : Activity() {
         totalText.text =
             "0.00 km"
 
-        totalText.textSize = 46f
+        totalText.textSize =
+            46f
 
         totalText.setTextColor(
             Color.WHITE
@@ -187,9 +209,9 @@ class MainActivity : Activity() {
 
         addSpace(root, 30)
 
-        // -------------------------------------------------
-        // CURRENT SPEED LABEL
-        // -------------------------------------------------
+        // =================================================
+        // CURRENT SPEED
+        // =================================================
 
         val speedLabel =
             TextView(this)
@@ -197,7 +219,8 @@ class MainActivity : Activity() {
         speedLabel.text =
             "CURRENT SPEED"
 
-        speedLabel.textSize = 15f
+        speedLabel.textSize =
+            15f
 
         speedLabel.setTextColor(
             Color.GRAY
@@ -211,11 +234,7 @@ class MainActivity : Activity() {
             wrapContentParams()
         )
 
-        addSpace(root, 5)
-
-        // -------------------------------------------------
-        // CURRENT SPEED
-        // -------------------------------------------------
+        addSpace(root, 4)
 
         speedText =
             TextView(this)
@@ -223,7 +242,8 @@ class MainActivity : Activity() {
         speedText.text =
             "0.0 km/h"
 
-        speedText.textSize = 34f
+        speedText.textSize =
+            34f
 
         speedText.setTextColor(
             Color.WHITE
@@ -242,17 +262,18 @@ class MainActivity : Activity() {
 
         addSpace(root, 28)
 
-        // -------------------------------------------------
+        // =================================================
         // GPS STATUS
-        // -------------------------------------------------
+        // =================================================
 
         statusText =
             TextView(this)
 
         statusText.text =
-            "GPS STATUS\nChecking..."
+            "GPS STATUS\nREADY"
 
-        statusText.textSize = 16f
+        statusText.textSize =
+            16f
 
         statusText.setTextColor(
             Color.LTGRAY
@@ -263,9 +284,9 @@ class MainActivity : Activity() {
 
         statusText.setPadding(
             10,
+            8,
             10,
-            10,
-            10
+            8
         )
 
         root.addView(
@@ -273,19 +294,16 @@ class MainActivity : Activity() {
             wrapContentParams()
         )
 
-        addSpace(root, 20)
+        addSpace(root, 22)
 
-        // -------------------------------------------------
-        // START / STOP
-        // -------------------------------------------------
+        // =================================================
+        // START / STOP BUTTON
+        // =================================================
 
         trackingButton =
-            Button(this)
-
-        trackingButton.text =
-            "START TRACKING"
-
-        trackingButton.textSize = 16f
+            createActionButton(
+                "START TRACKING"
+            )
 
         trackingButton.setOnClickListener {
 
@@ -306,17 +324,14 @@ class MainActivity : Activity() {
 
         addSpace(root, 12)
 
-        // -------------------------------------------------
-        // REFRESH
-        // -------------------------------------------------
+        // =================================================
+        // REFRESH BUTTON
+        // =================================================
 
         val refreshButton =
-            Button(this)
-
-        refreshButton.text =
-            "REFRESH"
-
-        refreshButton.textSize = 16f
+            createActionButton(
+                "REFRESH"
+            )
 
         refreshButton.setOnClickListener {
 
@@ -325,14 +340,14 @@ class MainActivity : Activity() {
 
         root.addView(
             refreshButton,
-            fullWidthParams(54)
+            fullWidthParams(58)
         )
 
-        addSpace(root, 25)
+        addSpace(root, 28)
 
-        // -------------------------------------------------
-        // THRESHOLD LABEL
-        // -------------------------------------------------
+        // =================================================
+        // SPEED THRESHOLD
+        // =================================================
 
         val thresholdLabel =
             TextView(this)
@@ -340,7 +355,8 @@ class MainActivity : Activity() {
         thresholdLabel.text =
             "ODOMETER SPEED THRESHOLD"
 
-        thresholdLabel.textSize = 13f
+        thresholdLabel.textSize =
+            13f
 
         thresholdLabel.setTextColor(
             Color.GRAY
@@ -356,10 +372,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 5)
 
-        // -------------------------------------------------
-        // THRESHOLD VALUE
-        // -------------------------------------------------
-
         val threshold =
             TextView(this)
 
@@ -368,7 +380,8 @@ class MainActivity : Activity() {
                 database.getSpeedThreshold()
             )
 
-        threshold.textSize = 19f
+        threshold.textSize =
+            19f
 
         threshold.setTextColor(
             Color.WHITE
@@ -387,9 +400,9 @@ class MainActivity : Activity() {
 
         addSpace(root, 35)
 
-        // -------------------------------------------------
+        // =================================================
         // FOOTER
-        // -------------------------------------------------
+        // =================================================
 
         val footer =
             TextView(this)
@@ -397,7 +410,8 @@ class MainActivity : Activity() {
         footer.text =
             "App by Potato's man"
 
-        footer.textSize = 13f
+        footer.textSize =
+            13f
 
         footer.setTextColor(
             Color.GRAY
@@ -422,9 +436,64 @@ class MainActivity : Activity() {
         setContentView(scrollView)
     }
 
-    // -----------------------------------------------------
+    // =====================================================
+    // BUTTON CREATION
+    // =====================================================
+
+    private fun createActionButton(
+        text: String
+    ): Button {
+
+        return Button(this).apply {
+
+            this.text = text
+
+            textSize = 16f
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            typeface =
+                Typeface.DEFAULT_BOLD
+
+            gravity =
+                Gravity.CENTER
+
+            isAllCaps = false
+
+            setPadding(
+                10,
+                0,
+                10,
+                0
+            )
+
+            background =
+                GradientDrawable().apply {
+
+                    cornerRadius =
+                        18f
+
+                    setColor(
+                        Color.parseColor(
+                            BUTTON_DARK
+                        )
+                    )
+
+                    setStroke(
+                        2,
+                        Color.parseColor(
+                            TIFFANY
+                        )
+                    )
+                }
+        }
+    }
+
+    // =====================================================
     // START TRACKING
-    // -----------------------------------------------------
+    // =====================================================
 
     private fun startTracking() {
 
@@ -443,29 +512,61 @@ class MainActivity : Activity() {
 
         try {
 
-            ContextCompat.startForegroundService(
-                this,
-                intent
-            )
+            ContextCompat
+                .startForegroundService(
+                    this,
+                    intent
+                )
 
-            trackingActive = true
+            trackingActive =
+                true
 
             trackingButton.text =
                 "STOP TRACKING"
 
+            trackingButton.background =
+                GradientDrawable().apply {
+
+                    cornerRadius =
+                        18f
+
+                    setColor(
+                        Color.parseColor(
+                            DARK_TIFFANY
+                        )
+                    )
+
+                    setStroke(
+                        2,
+                        Color.parseColor(
+                            TIFFANY
+                        )
+                    )
+                }
+
             statusText.text =
                 "GPS STATUS\nTRACKING ACTIVE"
 
-        } catch (e: Exception) {
+            statusText.setTextColor(
+                Color.parseColor(
+                    TIFFANY
+                )
+            )
+
+        } catch (_: Exception) {
 
             statusText.text =
-                "GPS STATUS\nUnable to start"
+                "GPS STATUS\nUNABLE TO START"
+
+            statusText.setTextColor(
+                Color.RED
+            )
         }
     }
 
-    // -----------------------------------------------------
+    // =====================================================
     // STOP TRACKING
-    // -----------------------------------------------------
+    // =====================================================
 
     private fun stopTracking() {
 
@@ -485,13 +586,38 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
         }
 
-        trackingActive = false
+        trackingActive =
+            false
 
         trackingButton.text =
             "START TRACKING"
 
+        trackingButton.background =
+            GradientDrawable().apply {
+
+                cornerRadius =
+                    18f
+
+                setColor(
+                    Color.parseColor(
+                        BUTTON_DARK
+                    )
+                )
+
+                setStroke(
+                    2,
+                    Color.parseColor(
+                        TIFFANY
+                    )
+                )
+            }
+
         statusText.text =
             "GPS STATUS\nTRACKING STOPPED"
+
+        statusText.setTextColor(
+            Color.LTGRAY
+        )
 
         speedText.text =
             "0.0 km/h"
@@ -499,9 +625,9 @@ class MainActivity : Activity() {
         refreshTotal()
     }
 
-    // -----------------------------------------------------
+    // =====================================================
     // PERMISSIONS
-    // -----------------------------------------------------
+    // =====================================================
 
     private fun requestLocationPermission() {
 
@@ -518,17 +644,20 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
+    private fun hasLocationPermission():
+        Boolean {
 
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+        return ContextCompat
+            .checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
-    // -----------------------------------------------------
+    // =====================================================
     // REFRESH
-    // -----------------------------------------------------
+    // =====================================================
 
     private fun refreshTotal() {
 
@@ -538,9 +667,9 @@ class MainActivity : Activity() {
             )
     }
 
-    // -----------------------------------------------------
+    // =====================================================
     // LAYOUT HELPERS
-    // -----------------------------------------------------
+    // =====================================================
 
     private fun wrapContentParams():
         LinearLayout.LayoutParams {
@@ -579,9 +708,9 @@ class MainActivity : Activity() {
         )
     }
 
-    // -----------------------------------------------------
+    // =====================================================
     // LIFECYCLE
-    // -----------------------------------------------------
+    // =====================================================
 
     override fun onResume() {
 
@@ -591,7 +720,8 @@ class MainActivity : Activity() {
             this,
             receiver,
             IntentFilter(
-                LocationTrackingService.ACTION_SPEED_UPDATE
+                LocationTrackingService
+                    .ACTION_SPEED_UPDATE
             ),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
