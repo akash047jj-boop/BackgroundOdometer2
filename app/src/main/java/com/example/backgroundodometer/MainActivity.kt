@@ -240,4 +240,388 @@ class MainActivity : Activity() {
             wrapContentParams()
         )
 
-       
+        addSpace(root, 28)
+
+        // -------------------------------------------------
+        // GPS STATUS
+        // -------------------------------------------------
+
+        statusText =
+            TextView(this)
+
+        statusText.text =
+            "GPS STATUS\nChecking..."
+
+        statusText.textSize = 16f
+
+        statusText.setTextColor(
+            Color.LTGRAY
+        )
+
+        statusText.gravity =
+            Gravity.CENTER
+
+        statusText.setPadding(
+            10,
+            10,
+            10,
+            10
+        )
+
+        root.addView(
+            statusText,
+            wrapContentParams()
+        )
+
+        addSpace(root, 20)
+
+        // -------------------------------------------------
+        // START / STOP
+        // -------------------------------------------------
+
+        trackingButton =
+            Button(this)
+
+        trackingButton.text =
+            "START TRACKING"
+
+        trackingButton.textSize = 16f
+
+        trackingButton.setOnClickListener {
+
+            if (trackingActive) {
+
+                stopTracking()
+
+            } else {
+
+                startTracking()
+            }
+        }
+
+        root.addView(
+            trackingButton,
+            fullWidthParams(58)
+        )
+
+        addSpace(root, 12)
+
+        // -------------------------------------------------
+        // REFRESH
+        // -------------------------------------------------
+
+        val refreshButton =
+            Button(this)
+
+        refreshButton.text =
+            "REFRESH"
+
+        refreshButton.textSize = 16f
+
+        refreshButton.setOnClickListener {
+
+            refreshTotal()
+        }
+
+        root.addView(
+            refreshButton,
+            fullWidthParams(54)
+        )
+
+        addSpace(root, 25)
+
+        // -------------------------------------------------
+        // THRESHOLD LABEL
+        // -------------------------------------------------
+
+        val thresholdLabel =
+            TextView(this)
+
+        thresholdLabel.text =
+            "ODOMETER SPEED THRESHOLD"
+
+        thresholdLabel.textSize = 13f
+
+        thresholdLabel.setTextColor(
+            Color.GRAY
+        )
+
+        thresholdLabel.gravity =
+            Gravity.CENTER
+
+        root.addView(
+            thresholdLabel,
+            wrapContentParams()
+        )
+
+        addSpace(root, 5)
+
+        // -------------------------------------------------
+        // THRESHOLD VALUE
+        // -------------------------------------------------
+
+        val threshold =
+            TextView(this)
+
+        threshold.text =
+            "%.1f km/h".format(
+                database.getSpeedThreshold()
+            )
+
+        threshold.textSize = 19f
+
+        threshold.setTextColor(
+            Color.WHITE
+        )
+
+        threshold.typeface =
+            Typeface.DEFAULT_BOLD
+
+        threshold.gravity =
+            Gravity.CENTER
+
+        root.addView(
+            threshold,
+            wrapContentParams()
+        )
+
+        addSpace(root, 35)
+
+        // -------------------------------------------------
+        // FOOTER
+        // -------------------------------------------------
+
+        val footer =
+            TextView(this)
+
+        footer.text =
+            "App by Potato's man"
+
+        footer.textSize = 13f
+
+        footer.setTextColor(
+            Color.GRAY
+        )
+
+        footer.gravity =
+            Gravity.CENTER
+
+        root.addView(
+            footer,
+            wrapContentParams()
+        )
+
+        scrollView.addView(
+            root,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        setContentView(scrollView)
+    }
+
+    // -----------------------------------------------------
+    // START TRACKING
+    // -----------------------------------------------------
+
+    private fun startTracking() {
+
+        if (!hasLocationPermission()) {
+
+            requestLocationPermission()
+
+            return
+        }
+
+        val intent =
+            Intent(
+                this,
+                LocationTrackingService::class.java
+            )
+
+        try {
+
+            ContextCompat.startForegroundService(
+                this,
+                intent
+            )
+
+            trackingActive = true
+
+            trackingButton.text =
+                "STOP TRACKING"
+
+            statusText.text =
+                "GPS STATUS\nTRACKING ACTIVE"
+
+        } catch (e: Exception) {
+
+            statusText.text =
+                "GPS STATUS\nUnable to start"
+        }
+    }
+
+    // -----------------------------------------------------
+    // STOP TRACKING
+    // -----------------------------------------------------
+
+    private fun stopTracking() {
+
+        val intent =
+            Intent(
+                this,
+                LocationTrackingService::class.java
+            )
+
+        intent.action =
+            LocationTrackingService.ACTION_STOP
+
+        try {
+
+            startService(intent)
+
+        } catch (_: Exception) {
+        }
+
+        trackingActive = false
+
+        trackingButton.text =
+            "START TRACKING"
+
+        statusText.text =
+            "GPS STATUS\nTRACKING STOPPED"
+
+        speedText.text =
+            "0.0 km/h"
+
+        refreshTotal()
+    }
+
+    // -----------------------------------------------------
+    // PERMISSIONS
+    // -----------------------------------------------------
+
+    private fun requestLocationPermission() {
+
+        if (!hasLocationPermission()) {
+
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                100
+            )
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean {
+
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    // -----------------------------------------------------
+    // REFRESH
+    // -----------------------------------------------------
+
+    private fun refreshTotal() {
+
+        totalText.text =
+            "%.2f km".format(
+                database.getTotalOdometer()
+            )
+    }
+
+    // -----------------------------------------------------
+    // LAYOUT HELPERS
+    // -----------------------------------------------------
+
+    private fun wrapContentParams():
+        LinearLayout.LayoutParams {
+
+        return LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    private fun fullWidthParams(
+        height: Int
+    ):
+        LinearLayout.LayoutParams {
+
+        return LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            height
+        )
+    }
+
+    private fun addSpace(
+        parent: LinearLayout,
+        height: Int
+    ) {
+
+        val space =
+            View(this)
+
+        parent.addView(
+            space,
+            LinearLayout.LayoutParams(
+                1,
+                height
+            )
+        )
+    }
+
+    // -----------------------------------------------------
+    // LIFECYCLE
+    // -----------------------------------------------------
+
+    override fun onResume() {
+
+        super.onResume()
+
+        ContextCompat.registerReceiver(
+            this,
+            receiver,
+            IntentFilter(
+                LocationTrackingService.ACTION_SPEED_UPDATE
+            ),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        refreshTotal()
+    }
+
+    override fun onPause() {
+
+        try {
+
+            unregisterReceiver(
+                receiver
+            )
+
+        } catch (_: Exception) {
+        }
+
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+
+        try {
+
+            database.close()
+
+        } catch (_: Exception) {
+        }
+
+        super.onDestroy()
+    }
+}
