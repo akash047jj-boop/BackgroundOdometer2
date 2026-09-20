@@ -25,6 +25,7 @@ class TripsActivity : Activity() {
         LinearLayout
 
     companion object {
+
         private const val TIFFANY =
             "#00BCD4"
 
@@ -251,8 +252,7 @@ class TripsActivity : Activity() {
         card.background =
             GradientDrawable().apply {
 
-                cornerRadius =
-                    20f
+                cornerRadius = 20f
 
                 setColor(
                     Color.parseColor(CARD)
@@ -381,10 +381,7 @@ class TripsActivity : Activity() {
         )
 
         val params =
-            fullParams(0)
-
-        params.height =
-            ViewGroup.LayoutParams.WRAP_CONTENT
+            wrapParams()
 
         params.bottomMargin =
             12
