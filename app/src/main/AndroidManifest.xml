@@ -60,6 +60,10 @@
             android:name=".TripDetailActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".RouteMapActivity"
+            android:exported="false" />
+
         <service
             android:name=".LocationTrackingService"
             android:enabled="true"
