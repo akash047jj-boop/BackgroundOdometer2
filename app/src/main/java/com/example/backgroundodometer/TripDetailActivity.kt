@@ -19,11 +19,6 @@ class TripDetailActivity : Activity() {
     private lateinit var database:
         OdometerDatabaseHelper
 
-    companion object {
-        private const val TIFFANY =
-            "#00BCD4"
-    }
-
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -51,10 +46,6 @@ class TripDetailActivity : Activity() {
         )
     }
 
-    // =====================================================
-    // INTERFACE
-    // =====================================================
-
     private fun buildInterface(
         tripId: Long
     ) {
@@ -74,33 +65,14 @@ class TripDetailActivity : Activity() {
 
         root.setPadding(
             24,
-            55,
+            45,
             24,
             40
         )
 
-        val title =
-            TextView(this)
-
-        title.text =
+        addTitle(
+            root,
             "TRIP DETAILS"
-
-        title.textSize =
-            26f
-
-        title.setTextColor(
-            Color.WHITE
-        )
-
-        title.typeface =
-            Typeface.DEFAULT_BOLD
-
-        title.gravity =
-            Gravity.CENTER
-
-        root.addView(
-            title,
-            wrapParams()
         )
 
         addSpace(
@@ -122,193 +94,93 @@ class TripDetailActivity : Activity() {
                 Color.RED
             )
 
-            setContentView(scroll)
+        } else {
 
-            scroll.addView(root)
+            val points =
+                database.getTrackPoints(
+                    tripId
+                )
 
-            return
+            addSection(
+                root,
+                "DATE",
+                formatDate(
+                    trip.startTime
+                )
+            )
+
+            addSection(
+                root,
+                "START TIME",
+                formatDateTime(
+                    trip.startTime
+                )
+            )
+
+            addSection(
+                root,
+                "END TIME",
+                if (trip.endTime > 0) {
+                    formatDateTime(
+                        trip.endTime
+                    )
+                } else {
+                    "Active"
+                }
+            )
+
+            addSection(
+                root,
+                "ODOMETER DISTANCE",
+                "%.2f km".format(
+                    trip.distanceKm
+                ),
+                true
+            )
+
+            addSection(
+                root,
+                "AVERAGE SPEED",
+                "%.1f km/h".format(
+                    trip.averageSpeed
+                ),
+                true
+            )
+
+            addSection(
+                root,
+                "MAXIMUM SPEED",
+                "%.1f km/h".format(
+                    trip.maxSpeed
+                ),
+                true
+            )
+
+            addSection(
+                root,
+                "GPS POINTS RECORDED",
+                points.size.toString(),
+                true
+            )
+
+            addSpace(
+                root,
+                10
+            )
+
+            addText(
+                root,
+                "GPS points are retained even when " +
+                    "speed is below the odometer threshold.",
+                13f,
+                Color.GRAY
+            )
         }
-
-        val points =
-            database.getTrackPoints(
-                tripId
-            )
-
-        // =================================================
-        // DATE
-        // =================================================
-
-        addLabel(
-            root,
-            "DATE"
-        )
-
-        addValue(
-            root,
-            formatDate(
-                trip.startTime
-            )
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // START
-        // =================================================
-
-        addLabel(
-            root,
-            "START TIME"
-        )
-
-        addValue(
-            root,
-            formatDateTime(
-                trip.startTime
-            )
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // END
-        // =================================================
-
-        addLabel(
-            root,
-            "END TIME"
-        )
-
-        addValue(
-            root,
-            trip.endTime?.let {
-                formatDateTime(it)
-            } ?: "Active"
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // DISTANCE
-        // =================================================
-
-        addLabel(
-            root,
-            "ODOMETER DISTANCE"
-        )
-
-        addBigValue(
-            root,
-            "%.2f km".format(
-                trip.distanceKm
-            )
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // AVERAGE
-        // =================================================
-
-        addLabel(
-            root,
-            "AVERAGE SPEED"
-        )
-
-        addBigValue(
-            root,
-            "%.1f km/h".format(
-                trip.averageSpeed
-            )
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // MAXIMUM
-        // =================================================
-
-        addLabel(
-            root,
-            "MAXIMUM SPEED"
-        )
-
-        addBigValue(
-            root,
-            "%.1f km/h".format(
-                trip.maxSpeed
-            )
-        )
-
-        addSpace(
-            root,
-            20
-        )
-
-        // =================================================
-        // GPS POINTS
-        // =================================================
-
-        addLabel(
-            root,
-            "GPS POINTS RECORDED"
-        )
-
-        addBigValue(
-            root,
-            points.size.toString()
-        )
-
-        addSpace(
-            root,
-            15
-        )
-
-        val explanation =
-            TextView(this)
-
-        explanation.text =
-            "GPS points are retained even when " +
-                "speed is below the odometer threshold."
-
-        explanation.textSize =
-            13f
-
-        explanation.setTextColor(
-            Color.GRAY
-        )
-
-        explanation.gravity =
-            Gravity.CENTER
-
-        root.addView(
-            explanation,
-            wrapParams()
-        )
 
         addSpace(
             root,
             30
         )
-
-        // =================================================
-        // BACK
-        // =================================================
 
         val back =
             TextView(this)
@@ -337,8 +209,10 @@ class TripDetailActivity : Activity() {
         )
 
         back.setBackgroundColor(
-            Color.parseColor(
-                "#151515"
+            Color.rgb(
+                21,
+                21,
+                21
             )
         )
 
@@ -362,11 +236,7 @@ class TripDetailActivity : Activity() {
         setContentView(scroll)
     }
 
-    // =====================================================
-    // TEXT
-    // =====================================================
-
-    private fun addLabel(
+    private fun addTitle(
         root: LinearLayout,
         text: String
     ) {
@@ -374,34 +244,42 @@ class TripDetailActivity : Activity() {
         addText(
             root,
             text,
+            27f,
+            Color.WHITE,
+            true
+        )
+    }
+
+    private fun addSection(
+        root: LinearLayout,
+        label: String,
+        value: String,
+        big: Boolean = false
+    ) {
+
+        addText(
+            root,
+            label,
             14f,
             Color.GRAY
         )
-    }
 
-    private fun addValue(
-        root: LinearLayout,
-        text: String
-    ) {
-
-        addText(
+        addSpace(
             root,
-            text,
-            19f,
-            Color.WHITE
+            4
         )
-    }
-
-    private fun addBigValue(
-        root: LinearLayout,
-        text: String
-    ) {
 
         addText(
             root,
-            text,
-            28f,
-            Color.WHITE
+            value,
+            if (big) 27f else 18f,
+            Color.WHITE,
+            big
+        )
+
+        addSpace(
+            root,
+            20
         )
     }
 
@@ -409,7 +287,8 @@ class TripDetailActivity : Activity() {
         root: LinearLayout,
         text: String,
         size: Float,
-        color: Int
+        color: Int,
+        bold: Boolean = false
     ) {
 
         val view =
@@ -428,7 +307,7 @@ class TripDetailActivity : Activity() {
         view.gravity =
             Gravity.CENTER
 
-        if (size >= 25f) {
+        if (bold) {
             view.typeface =
                 Typeface.DEFAULT_BOLD
         }
@@ -439,37 +318,29 @@ class TripDetailActivity : Activity() {
         )
     }
 
-    // =====================================================
-    // DATE
-    // =====================================================
-
     private fun formatDate(
-        timestamp: Long
+        time: Long
     ): String {
 
         return SimpleDateFormat(
             "dd MMMM yyyy",
             Locale.getDefault()
         ).format(
-            Date(timestamp)
+            Date(time)
         )
     }
 
     private fun formatDateTime(
-        timestamp: Long
+        time: Long
     ): String {
 
         return SimpleDateFormat(
             "dd MMM yyyy • hh:mm:ss a",
             Locale.getDefault()
         ).format(
-            Date(timestamp)
+            Date(time)
         )
     }
-
-    // =====================================================
-    // HELPERS
-    // =====================================================
 
     private fun wrapParams():
         LinearLayout.LayoutParams {
@@ -485,11 +356,8 @@ class TripDetailActivity : Activity() {
         height: Int
     ) {
 
-        val space =
-            View(this)
-
         parent.addView(
-            space,
+            View(this),
             LinearLayout.LayoutParams(
                 1,
                 height
