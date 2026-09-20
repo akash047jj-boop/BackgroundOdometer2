@@ -14,7 +14,11 @@ data class TripSummary(
     val endTime: Long,
     val distanceKm: Double,
     val averageSpeed: Double,
-    val maxSpeed: Double
+    val maxSpeed: Double,
+    val gpsDistanceKm: Double = 0.0,
+    val roadDistanceKm: Double = 0.0,
+    val distanceSource: String = "GPS",
+    val matchingConfidence: Double = 0.0
 )
 
 data class TrackPoint(
@@ -33,7 +37,7 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    1
+    2
 ) {
 
     companion object {
@@ -61,7 +65,11 @@ class OdometerDatabaseHelper(
                 distance_km REAL DEFAULT 0,
                 average_speed REAL DEFAULT 0,
                 max_speed REAL DEFAULT 0,
-                completed INTEGER DEFAULT 0
+                completed INTEGER DEFAULT 0,
+                gps_distance_km REAL DEFAULT 0,
+                road_distance_km REAL DEFAULT 0,
+                distance_source TEXT DEFAULT 'GPS',
+                matching_confidence REAL DEFAULT 0
             )
             """.trimIndent()
         )
@@ -101,7 +109,49 @@ class OdometerDatabaseHelper(
         oldVersion: Int,
         newVersion: Int
     ) {
-        // Reserved for future database migrations.
+
+        if (oldVersion < 2) {
+
+            db.execSQL(
+                """
+                ALTER TABLE trips
+                ADD COLUMN gps_distance_km REAL DEFAULT 0
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                ALTER TABLE trips
+                ADD COLUMN road_distance_km REAL DEFAULT 0
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                ALTER TABLE trips
+                ADD COLUMN distance_source TEXT DEFAULT 'GPS'
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                ALTER TABLE trips
+                ADD COLUMN matching_confidence REAL DEFAULT 0
+                """.trimIndent()
+            )
+
+            /*
+             * Existing V6 trips already have distance_km.
+             * Preserve that distance as the GPS distance.
+             */
+            db.execSQL(
+                """
+                UPDATE trips
+                SET gps_distance_km = distance_km
+                WHERE gps_distance_km = 0
+                """.trimIndent()
+            )
+        }
     }
 
     private fun setSetting(
@@ -181,6 +231,31 @@ class OdometerDatabaseHelper(
             0
         )
 
+        values.put(
+            "distance_km",
+            0.0
+        )
+
+        values.put(
+            "gps_distance_km",
+            0.0
+        )
+
+        values.put(
+            "road_distance_km",
+            0.0
+        )
+
+        values.put(
+            "distance_source",
+            "GPS"
+        )
+
+        values.put(
+            "matching_confidence",
+            0.0
+        )
+
         return writableDatabase.insert(
             TABLE_TRIPS,
             null,
@@ -200,7 +275,11 @@ class OdometerDatabaseHelper(
                     end_time,
                     distance_km,
                     average_speed,
-                    max_speed
+                    max_speed,
+                    gps_distance_km,
+                    road_distance_km,
+                    distance_source,
+                    matching_confidence
                 FROM trips
                 WHERE completed = 0
                 ORDER BY id DESC
@@ -213,14 +292,7 @@ class OdometerDatabaseHelper(
 
             if (it.moveToFirst()) {
 
-                return TripSummary(
-                    id = it.getLong(0),
-                    startTime = it.getLong(1),
-                    endTime = it.getLong(2),
-                    distanceKm = it.getDouble(3),
-                    averageSpeed = it.getDouble(4),
-                    maxSpeed = it.getDouble(5)
-                )
+                return cursorToTrip(it)
             }
         }
 
@@ -344,6 +416,11 @@ class OdometerDatabaseHelper(
             maxSpeed
         )
 
+        values.put(
+            "end_time",
+            lastTime
+        )
+
         writableDatabase.update(
             TABLE_TRIPS,
             values,
@@ -354,10 +431,37 @@ class OdometerDatabaseHelper(
         )
     }
 
+    /*
+     * Existing API preserved.
+     */
     fun completeTrip(
         tripId: Long,
         distanceKm: Double,
         routeJson: String?,
+        endTime: Long
+    ) {
+
+        completeTripWithDistances(
+            tripId = tripId,
+            gpsDistanceKm = distanceKm,
+            roadDistanceKm = 0.0,
+            finalDistanceKm = distanceKm,
+            distanceSource = "GPS",
+            confidence = 0.0,
+            endTime = endTime
+        )
+    }
+
+    /*
+     * V7 authoritative completion.
+     */
+    fun completeTripWithDistances(
+        tripId: Long,
+        gpsDistanceKm: Double,
+        roadDistanceKm: Double,
+        finalDistanceKm: Double,
+        distanceSource: String,
+        confidence: Double,
         endTime: Long
     ) {
 
@@ -366,7 +470,27 @@ class OdometerDatabaseHelper(
 
         values.put(
             "distance_km",
-            distanceKm
+            finalDistanceKm
+        )
+
+        values.put(
+            "gps_distance_km",
+            gpsDistanceKm
+        )
+
+        values.put(
+            "road_distance_km",
+            roadDistanceKm
+        )
+
+        values.put(
+            "distance_source",
+            distanceSource
+        )
+
+        values.put(
+            "matching_confidence",
+            confidence
         )
 
         values.put(
@@ -392,6 +516,9 @@ class OdometerDatabaseHelper(
     fun markTripProcessing(
         tripId: Long
     ) {
+        /*
+         * Reserved for future UI status.
+         */
     }
 
     fun markTripFailed(
@@ -404,6 +531,11 @@ class OdometerDatabaseHelper(
         values.put(
             "completed",
             1
+        )
+
+        values.put(
+            "distance_source",
+            "GPS"
         )
 
         writableDatabase.update(
@@ -431,7 +563,11 @@ class OdometerDatabaseHelper(
                     end_time,
                     distance_km,
                     average_speed,
-                    max_speed
+                    max_speed,
+                    gps_distance_km,
+                    road_distance_km,
+                    distance_source,
+                    matching_confidence
                 FROM trips
                 WHERE completed = 1
                 ORDER BY start_time DESC
@@ -444,14 +580,7 @@ class OdometerDatabaseHelper(
             while (it.moveToNext()) {
 
                 result.add(
-                    TripSummary(
-                        id = it.getLong(0),
-                        startTime = it.getLong(1),
-                        endTime = it.getLong(2),
-                        distanceKm = it.getDouble(3),
-                        averageSpeed = it.getDouble(4),
-                        maxSpeed = it.getDouble(5)
-                    )
+                    cursorToTrip(it)
                 )
             }
         }
@@ -472,7 +601,11 @@ class OdometerDatabaseHelper(
                     end_time,
                     distance_km,
                     average_speed,
-                    max_speed
+                    max_speed,
+                    gps_distance_km,
+                    road_distance_km,
+                    distance_source,
+                    matching_confidence
                 FROM trips
                 WHERE id = ?
                 """,
@@ -485,14 +618,7 @@ class OdometerDatabaseHelper(
 
             if (it.moveToFirst()) {
 
-                return TripSummary(
-                    id = it.getLong(0),
-                    startTime = it.getLong(1),
-                    endTime = it.getLong(2),
-                    distanceKm = it.getDouble(3),
-                    averageSpeed = it.getDouble(4),
-                    maxSpeed = it.getDouble(5)
-                )
+                return cursorToTrip(it)
             }
         }
 
@@ -511,7 +637,11 @@ class OdometerDatabaseHelper(
                     end_time,
                     distance_km,
                     average_speed,
-                    max_speed
+                    max_speed,
+                    gps_distance_km,
+                    road_distance_km,
+                    distance_source,
+                    matching_confidence
                 FROM trips
                 WHERE completed = 1
                 ORDER BY end_time DESC
@@ -524,14 +654,7 @@ class OdometerDatabaseHelper(
 
             if (it.moveToFirst()) {
 
-                return TripSummary(
-                    id = it.getLong(0),
-                    startTime = it.getLong(1),
-                    endTime = it.getLong(2),
-                    distanceKm = it.getDouble(3),
-                    averageSpeed = it.getDouble(4),
-                    maxSpeed = it.getDouble(5)
-                )
+                return cursorToTrip(it)
             }
         }
 
@@ -608,5 +731,44 @@ class OdometerDatabaseHelper(
         }
 
         return 0.0
+    }
+
+    private fun cursorToTrip(
+        cursor: android.database.Cursor
+    ): TripSummary {
+
+        return TripSummary(
+
+            id =
+                cursor.getLong(0),
+
+            startTime =
+                cursor.getLong(1),
+
+            endTime =
+                cursor.getLong(2),
+
+            distanceKm =
+                cursor.getDouble(3),
+
+            averageSpeed =
+                cursor.getDouble(4),
+
+            maxSpeed =
+                cursor.getDouble(5),
+
+            gpsDistanceKm =
+                cursor.getDouble(6),
+
+            roadDistanceKm =
+                cursor.getDouble(7),
+
+            distanceSource =
+                cursor.getString(8)
+                    ?: "GPS",
+
+            matchingConfidence =
+                cursor.getDouble(9)
+        )
     }
 }
