@@ -38,9 +38,6 @@ class OdometerDatabaseHelper(
 
     companion object {
 
-        private const val DATABASE_VERSION =
-            1
-
         private const val TABLE_TRIPS =
             "trips"
 
@@ -104,12 +101,8 @@ class OdometerDatabaseHelper(
         oldVersion: Int,
         newVersion: Int
     ) {
-        // V4 foundation.
+        // Reserved for future database migrations.
     }
-
-    // =====================================================
-    // SETTINGS
-    // =====================================================
 
     private fun setSetting(
         db: SQLiteDatabase,
@@ -141,11 +134,8 @@ class OdometerDatabaseHelper(
     fun getSpeedThreshold():
         Double {
 
-        val db =
-            readableDatabase
-
         val cursor =
-            db.rawQuery(
+            readableDatabase.rawQuery(
                 """
                 SELECT value
                 FROM settings
@@ -168,10 +158,6 @@ class OdometerDatabaseHelper(
 
         return 6.0
     }
-
-    // =====================================================
-    // TRIP CREATION
-    // =====================================================
 
     fun createTrip(
         startTime: Long
@@ -240,10 +226,6 @@ class OdometerDatabaseHelper(
 
         return null
     }
-
-    // =====================================================
-    // TRACK POINT
-    // =====================================================
 
     fun addTrackPoint(
         tripId: Long,
@@ -342,10 +324,6 @@ class OdometerDatabaseHelper(
         return result
     }
 
-    // =====================================================
-    // SPEED
-    // =====================================================
-
     fun updateTripSpeed(
         tripId: Long,
         averageSpeed: Double,
@@ -375,10 +353,6 @@ class OdometerDatabaseHelper(
             )
         )
     }
-
-    // =====================================================
-    // COMPLETE TRIP
-    // =====================================================
 
     fun completeTrip(
         tripId: Long,
@@ -418,7 +392,6 @@ class OdometerDatabaseHelper(
     fun markTripProcessing(
         tripId: Long
     ) {
-        // Reserved for future map processing.
     }
 
     fun markTripFailed(
@@ -442,10 +415,6 @@ class OdometerDatabaseHelper(
             )
         )
     }
-
-    // =====================================================
-    // TRIPS
-    // =====================================================
 
     fun getAllTrips():
         List<TripSummary> {
@@ -569,10 +538,6 @@ class OdometerDatabaseHelper(
         return null
     }
 
-    // =====================================================
-    // ODOMETER
-    // =====================================================
-
     fun getTotalOdometer():
         Double {
 
@@ -592,6 +557,7 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
+
                 return it.getDouble(0)
             }
         }
@@ -636,6 +602,7 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
+
                 return it.getDouble(0)
             }
         }
