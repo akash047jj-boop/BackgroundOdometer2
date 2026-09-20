@@ -16,6 +16,7 @@ import android.os.IBinder
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
 
 class LocationTrackingService : Service() {
