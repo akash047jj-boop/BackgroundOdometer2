@@ -236,7 +236,7 @@ class RouteMapActivity : Activity() {
         }
 
         val route =
-            Polyline(this)
+            Polyline(mapView)
 
         route.setPoints(
             geoPoints
