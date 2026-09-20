@@ -1,6 +1,7 @@
 package com.example.backgroundodometer
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -19,6 +20,9 @@ class TripDetailActivity : Activity() {
     private lateinit var database:
         OdometerDatabaseHelper
 
+    private var tripId:
+        Long = -1
+
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -28,7 +32,7 @@ class TripDetailActivity : Activity() {
         database =
             OdometerDatabaseHelper(this)
 
-        val tripId =
+        tripId =
             intent.getLongExtra(
                 "trip_id",
                 -1
@@ -41,14 +45,10 @@ class TripDetailActivity : Activity() {
             return
         }
 
-        buildInterface(
-            tripId
-        )
+        buildInterface()
     }
 
-    private fun buildInterface(
-        tripId: Long
-    ) {
+    private fun buildInterface() {
 
         val scroll =
             ScrollView(this)
@@ -166,6 +166,66 @@ class TripDetailActivity : Activity() {
             addSpace(
                 root,
                 10
+            )
+
+            val routeButton =
+                TextView(this)
+
+            routeButton.text =
+                "VIEW ROUTE MAP"
+
+            routeButton.textSize =
+                17f
+
+            routeButton.setTextColor(
+                Color.WHITE
+            )
+
+            routeButton.typeface =
+                Typeface.DEFAULT_BOLD
+
+            routeButton.gravity =
+                Gravity.CENTER
+
+            routeButton.setPadding(
+                10,
+                20,
+                10,
+                20
+            )
+
+            routeButton.setBackgroundColor(
+                Color.rgb(
+                    0,
+                    90,
+                    100
+                )
+            )
+
+            routeButton.setOnClickListener {
+
+                val intent =
+                    Intent(
+                        this,
+                        RouteMapActivity::class.java
+                    )
+
+                intent.putExtra(
+                    "trip_id",
+                    tripId
+                )
+
+                startActivity(intent)
+            }
+
+            root.addView(
+                routeButton,
+                wrapParams()
+            )
+
+            addSpace(
+                root,
+                18
             )
 
             addText(
@@ -308,6 +368,7 @@ class TripDetailActivity : Activity() {
             Gravity.CENTER
 
         if (bold) {
+
             view.typeface =
                 Typeface.DEFAULT_BOLD
         }
