@@ -11,11 +11,10 @@ import java.util.Locale
 data class TripSummary(
     val id: Long,
     val startTime: Long,
-    val endTime: Long?,
+    val endTime: Long,
     val distanceKm: Double,
     val averageSpeed: Double,
-    val maxSpeed: Double,
-    val completed: Boolean
+    val maxSpeed: Double
 )
 
 data class TrackPoint(
@@ -34,8 +33,23 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    2
+    1
 ) {
+
+    companion object {
+
+        private const val DATABASE_VERSION =
+            1
+
+        private const val TABLE_TRIPS =
+            "trips"
+
+        private const val TABLE_POINTS =
+            "track_points"
+
+        private const val TABLE_SETTINGS =
+            "settings"
+    }
 
     override fun onCreate(
         db: SQLiteDatabase
@@ -43,31 +57,14 @@ class OdometerDatabaseHelper(
 
         db.execSQL(
             """
-            CREATE TABLE settings (
-                id INTEGER PRIMARY KEY,
-                total_odometer REAL NOT NULL DEFAULT 0,
-                speed_threshold REAL NOT NULL DEFAULT 6,
-                distance_alert_enabled INTEGER NOT NULL DEFAULT 0,
-                distance_alert_target REAL NOT NULL DEFAULT 0,
-                distance_alert_fired INTEGER NOT NULL DEFAULT 0
-            )
-            """.trimIndent()
-        )
-
-        db.execSQL(
-            """
             CREATE TABLE trips (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 start_time INTEGER NOT NULL,
-                end_time INTEGER,
-                distance REAL NOT NULL DEFAULT 0,
-                average_speed REAL NOT NULL DEFAULT 0,
-                max_speed REAL NOT NULL DEFAULT 0,
-                route_json TEXT,
-                manual INTEGER NOT NULL DEFAULT 0,
-                completed INTEGER NOT NULL DEFAULT 0,
-                assigned_date TEXT,
-                assigned_place TEXT
+                end_time INTEGER DEFAULT 0,
+                distance_km REAL DEFAULT 0,
+                average_speed REAL DEFAULT 0,
+                max_speed REAL DEFAULT 0,
+                completed INTEGER DEFAULT 0
             )
             """.trimIndent()
         )
@@ -80,49 +77,25 @@ class OdometerDatabaseHelper(
                 latitude REAL NOT NULL,
                 longitude REAL NOT NULL,
                 time INTEGER NOT NULL,
-                speed REAL NOT NULL DEFAULT 0,
-                accuracy REAL NOT NULL DEFAULT 0
+                speed_kmh REAL DEFAULT 0,
+                accuracy REAL DEFAULT 0
             )
             """.trimIndent()
         )
 
-        val values =
-            ContentValues()
-
-        values.put(
-            "id",
-            1
+        db.execSQL(
+            """
+            CREATE TABLE settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """.trimIndent()
         )
 
-        values.put(
-            "total_odometer",
-            0.0
-        )
-
-        values.put(
+        setSetting(
+            db,
             "speed_threshold",
-            6.0
-        )
-
-        values.put(
-            "distance_alert_enabled",
-            0
-        )
-
-        values.put(
-            "distance_alert_target",
-            0.0
-        )
-
-        values.put(
-            "distance_alert_fired",
-            0
-        )
-
-        db.insert(
-            "settings",
-            null,
-            values
+            "6.0"
         )
     }
 
@@ -131,140 +104,75 @@ class OdometerDatabaseHelper(
         oldVersion: Int,
         newVersion: Int
     ) {
-
-        /*
-         * V2 already contained the required tables.
-         * This is intentionally left safe for existing
-         * V2 installations.
-         */
+        // V4 foundation.
     }
 
     // =====================================================
-    // ODOMETER
+    // SETTINGS
     // =====================================================
 
-    fun getTotalOdometer(): Double {
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT total_odometer
-                FROM settings
-                WHERE id=1
-                """.trimIndent(),
-                null
-            )
-
-        return cursor.use {
-
-            if (it.moveToFirst()) {
-                it.getDouble(0)
-            } else {
-                0.0
-            }
-        }
-    }
-
-    @Synchronized
-    fun addToOdometer(
-        distanceKm: Double
-    ) {
-
-        if (distanceKm <= 0.0) {
-            return
-        }
-
-        val current =
-            getTotalOdometer()
-
-        val values =
-            ContentValues()
-
-        values.put(
-            "total_odometer",
-            current + distanceKm
-        )
-
-        writableDatabase.update(
-            "settings",
-            values,
-            "id=1",
-            null
-        )
-    }
-
-    fun clearTotalOdometer() {
-
-        val values =
-            ContentValues()
-
-        values.put(
-            "total_odometer",
-            0.0
-        )
-
-        writableDatabase.update(
-            "settings",
-            values,
-            "id=1",
-            null
-        )
-    }
-
-    // =====================================================
-    // SPEED THRESHOLD
-    // =====================================================
-
-    fun getSpeedThreshold(): Double {
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT speed_threshold
-                FROM settings
-                WHERE id=1
-                """.trimIndent(),
-                null
-            )
-
-        return cursor.use {
-
-            if (it.moveToFirst()) {
-                it.getDouble(0)
-            } else {
-                6.0
-            }
-        }
-    }
-
-    fun setSpeedThreshold(
-        threshold: Double
+    private fun setSetting(
+        db: SQLiteDatabase,
+        key: String,
+        value: String
     ) {
 
         val values =
             ContentValues()
 
         values.put(
-            "speed_threshold",
-            maxOf(
-                0.0,
-                threshold
-            )
+            "key",
+            key
         )
 
-        writableDatabase.update(
-            "settings",
+        values.put(
+            "value",
+            value
+        )
+
+        db.insertWithOnConflict(
+            TABLE_SETTINGS,
+            null,
             values,
-            "id=1",
-            null
+            SQLiteDatabase.CONFLICT_REPLACE
         )
     }
 
+    fun getSpeedThreshold():
+        Double {
+
+        val db =
+            readableDatabase
+
+        val cursor =
+            db.rawQuery(
+                """
+                SELECT value
+                FROM settings
+                WHERE key = ?
+                """,
+                arrayOf(
+                    "speed_threshold"
+                )
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+
+                return it.getString(0)
+                    .toDoubleOrNull()
+                    ?: 6.0
+            }
+        }
+
+        return 6.0
+    }
+
     // =====================================================
-    // TRIPS
+    // TRIP CREATION
     // =====================================================
 
-    @Synchronized
     fun createTrip(
         startTime: Long
     ): Long {
@@ -278,243 +186,23 @@ class OdometerDatabaseHelper(
         )
 
         values.put(
-            "completed",
+            "end_time",
             0
         )
 
         values.put(
-            "manual",
+            "completed",
             0
         )
 
         return writableDatabase.insert(
-            "trips",
+            TABLE_TRIPS,
             null,
             values
         )
     }
 
-    fun getActiveTrip(): Long? {
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT id
-                FROM trips
-                WHERE completed=0
-                AND manual=0
-                ORDER BY id DESC
-                LIMIT 1
-                """.trimIndent(),
-                null
-            )
-
-        return cursor.use {
-
-            if (it.moveToFirst()) {
-                it.getLong(0)
-            } else {
-                null
-            }
-        }
-    }
-
-    fun completeTrip(
-        tripId: Long,
-        distanceKm: Double,
-        averageSpeed: Double,
-        maxSpeed: Double,
-        endTime: Long
-    ) {
-
-        val values =
-            ContentValues()
-
-        values.put(
-            "distance",
-            maxOf(
-                0.0,
-                distanceKm
-            )
-        )
-
-        values.put(
-            "average_speed",
-            maxOf(
-                0.0,
-                averageSpeed
-            )
-        )
-
-        values.put(
-            "max_speed",
-            maxOf(
-                0.0,
-                maxSpeed
-            )
-        )
-
-        values.put(
-            "end_time",
-            endTime
-        )
-
-        values.put(
-            "completed",
-            1
-        )
-
-        writableDatabase.update(
-            "trips",
-            values,
-            "id=?",
-            arrayOf(
-                tripId.toString()
-            )
-        )
-    }
-
-    fun getTrip(
-        tripId: Long
-    ): TripSummary? {
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance,
-                    average_speed,
-                    max_speed,
-                    completed
-                FROM trips
-                WHERE id=?
-                LIMIT 1
-                """.trimIndent(),
-                arrayOf(
-                    tripId.toString()
-                )
-            )
-
-        return cursor.use {
-
-            if (!it.moveToFirst()) {
-                return null
-            }
-
-            TripSummary(
-                id = it.getLong(0),
-                startTime = it.getLong(1),
-                endTime =
-                    if (it.isNull(2)) {
-                        null
-                    } else {
-                        it.getLong(2)
-                    },
-                distanceKm =
-                    it.getDouble(3),
-                averageSpeed =
-                    it.getDouble(4),
-                maxSpeed =
-                    it.getDouble(5),
-                completed =
-                    it.getInt(6) == 1
-            )
-        }
-    }
-
-    fun getAllTrips(): List<TripSummary> {
-
-        val result =
-            mutableListOf<TripSummary>()
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance,
-                    average_speed,
-                    max_speed,
-                    completed
-                FROM trips
-                WHERE manual=0
-                ORDER BY start_time DESC
-                """.trimIndent(),
-                null
-            )
-
-        cursor.use {
-
-            while (it.moveToNext()) {
-
-                result.add(
-                    TripSummary(
-                        id = it.getLong(0),
-                        startTime = it.getLong(1),
-                        endTime =
-                            if (it.isNull(2)) {
-                                null
-                            } else {
-                                it.getLong(2)
-                            },
-                        distanceKm =
-                            it.getDouble(3),
-                        averageSpeed =
-                            it.getDouble(4),
-                        maxSpeed =
-                            it.getDouble(5),
-                        completed =
-                            it.getInt(6) == 1
-                    )
-                )
-            }
-        }
-
-        return result
-    }
-
-    fun getTodayDistance(): Double {
-
-        val start =
-            getStartOfToday()
-
-        val end =
-            start + 24L * 60L * 60L * 1000L
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT COALESCE(
-                    SUM(distance),
-                    0
-                )
-                FROM trips
-                WHERE completed=1
-                AND start_time>=?
-                AND start_time<?
-                """.trimIndent(),
-                arrayOf(
-                    start.toString(),
-                    end.toString()
-                )
-            )
-
-        return cursor.use {
-
-            if (it.moveToFirst()) {
-                it.getDouble(0)
-            } else {
-                0.0
-            }
-        }
-    }
-
-    fun getLastCompletedTrip():
+    fun getActiveTrip():
         TripSummary? {
 
         val cursor =
@@ -524,48 +212,37 @@ class OdometerDatabaseHelper(
                     id,
                     start_time,
                     end_time,
-                    distance,
+                    distance_km,
                     average_speed,
-                    max_speed,
-                    completed
+                    max_speed
                 FROM trips
-                WHERE completed=1
-                AND manual=0
-                ORDER BY end_time DESC
+                WHERE completed = 0
+                ORDER BY id DESC
                 LIMIT 1
-                """.trimIndent(),
+                """,
                 null
             )
 
-        return cursor.use {
+        cursor.use {
 
-            if (!it.moveToFirst()) {
-                return null
+            if (it.moveToFirst()) {
+
+                return TripSummary(
+                    id = it.getLong(0),
+                    startTime = it.getLong(1),
+                    endTime = it.getLong(2),
+                    distanceKm = it.getDouble(3),
+                    averageSpeed = it.getDouble(4),
+                    maxSpeed = it.getDouble(5)
+                )
             }
-
-            TripSummary(
-                id = it.getLong(0),
-                startTime = it.getLong(1),
-                endTime =
-                    if (it.isNull(2)) {
-                        null
-                    } else {
-                        it.getLong(2)
-                    },
-                distanceKm =
-                    it.getDouble(3),
-                averageSpeed =
-                    it.getDouble(4),
-                maxSpeed =
-                    it.getDouble(5),
-                completed =
-                    it.getInt(6) == 1
-            )
         }
+
+        return null
     }
 
     // =====================================================
-    // TRACK POINTS
+    // TRACK POINT
     // =====================================================
 
     fun addTrackPoint(
@@ -573,7 +250,7 @@ class OdometerDatabaseHelper(
         latitude: Double,
         longitude: Double,
         time: Long,
-        speed: Double,
+        speedKmh: Double,
         accuracy: Double
     ) {
 
@@ -601,8 +278,8 @@ class OdometerDatabaseHelper(
         )
 
         values.put(
-            "speed",
-            speed
+            "speed_kmh",
+            speedKmh
         )
 
         values.put(
@@ -611,7 +288,7 @@ class OdometerDatabaseHelper(
         )
 
         writableDatabase.insert(
-            "track_points",
+            TABLE_POINTS,
             null,
             values
         )
@@ -633,12 +310,12 @@ class OdometerDatabaseHelper(
                     latitude,
                     longitude,
                     time,
-                    speed,
+                    speed_kmh,
                     accuracy
                 FROM track_points
-                WHERE trip_id=?
+                WHERE trip_id = ?
                 ORDER BY time ASC
-                """.trimIndent(),
+                """,
                 arrayOf(
                     tripId.toString()
                 )
@@ -666,127 +343,264 @@ class OdometerDatabaseHelper(
     }
 
     // =====================================================
-    // DISTANCE ALERT
+    // SPEED
     // =====================================================
 
-    fun setDistanceAlert(
-        enabled: Boolean,
-        target: Double
+    fun updateTripSpeed(
+        tripId: Long,
+        averageSpeed: Double,
+        maxSpeed: Double,
+        lastTime: Long
     ) {
 
         val values =
             ContentValues()
 
         values.put(
-            "distance_alert_enabled",
-            if (enabled) 1 else 0
+            "average_speed",
+            averageSpeed
         )
 
         values.put(
-            "distance_alert_target",
-            maxOf(0.0, target)
-        )
-
-        values.put(
-            "distance_alert_fired",
-            0
+            "max_speed",
+            maxSpeed
         )
 
         writableDatabase.update(
-            "settings",
+            TABLE_TRIPS,
             values,
-            "id=1",
-            null
+            "id = ?",
+            arrayOf(
+                tripId.toString()
+            )
         )
     }
 
-    fun isDistanceAlertEnabled():
-        Boolean {
+    // =====================================================
+    // COMPLETE TRIP
+    // =====================================================
 
-        return getIntSetting(
-            "distance_alert_enabled"
-        ) == 1
-    }
-
-    fun getDistanceAlertTarget():
-        Double {
-
-        return getDoubleSetting(
-            "distance_alert_target"
-        )
-    }
-
-    fun isDistanceAlertFired():
-        Boolean {
-
-        return getIntSetting(
-            "distance_alert_fired"
-        ) == 1
-    }
-
-    fun markDistanceAlertFired() {
+    fun completeTrip(
+        tripId: Long,
+        distanceKm: Double,
+        routeJson: String?,
+        endTime: Long
+    ) {
 
         val values =
             ContentValues()
 
         values.put(
-            "distance_alert_fired",
+            "distance_km",
+            distanceKm
+        )
+
+        values.put(
+            "end_time",
+            endTime
+        )
+
+        values.put(
+            "completed",
             1
         )
 
         writableDatabase.update(
-            "settings",
+            TABLE_TRIPS,
             values,
-            "id=1",
-            null
+            "id = ?",
+            arrayOf(
+                tripId.toString()
+            )
+        )
+    }
+
+    fun markTripProcessing(
+        tripId: Long
+    ) {
+        // Reserved for future map processing.
+    }
+
+    fun markTripFailed(
+        tripId: Long
+    ) {
+
+        val values =
+            ContentValues()
+
+        values.put(
+            "completed",
+            1
+        )
+
+        writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "id = ?",
+            arrayOf(
+                tripId.toString()
+            )
         )
     }
 
     // =====================================================
-    // HELPERS
+    // TRIPS
     // =====================================================
 
-    private fun getIntSetting(
-        column: String
-    ): Int {
+    fun getAllTrips():
+        List<TripSummary> {
+
+        val result =
+            mutableListOf<TripSummary>()
 
         val cursor =
             readableDatabase.rawQuery(
-                "SELECT $column FROM settings WHERE id=1",
+                """
+                SELECT
+                    id,
+                    start_time,
+                    end_time,
+                    distance_km,
+                    average_speed,
+                    max_speed
+                FROM trips
+                WHERE completed = 1
+                ORDER BY start_time DESC
+                """,
                 null
             )
 
-        return cursor.use {
+        cursor.use {
 
-            if (it.moveToFirst()) {
-                it.getInt(0)
-            } else {
-                0
+            while (it.moveToNext()) {
+
+                result.add(
+                    TripSummary(
+                        id = it.getLong(0),
+                        startTime = it.getLong(1),
+                        endTime = it.getLong(2),
+                        distanceKm = it.getDouble(3),
+                        averageSpeed = it.getDouble(4),
+                        maxSpeed = it.getDouble(5)
+                    )
+                )
             }
         }
+
+        return result
     }
 
-    private fun getDoubleSetting(
-        column: String
-    ): Double {
+    fun getTrip(
+        tripId: Long
+    ): TripSummary? {
 
         val cursor =
             readableDatabase.rawQuery(
-                "SELECT $column FROM settings WHERE id=1",
+                """
+                SELECT
+                    id,
+                    start_time,
+                    end_time,
+                    distance_km,
+                    average_speed,
+                    max_speed
+                FROM trips
+                WHERE id = ?
+                """,
+                arrayOf(
+                    tripId.toString()
+                )
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+
+                return TripSummary(
+                    id = it.getLong(0),
+                    startTime = it.getLong(1),
+                    endTime = it.getLong(2),
+                    distanceKm = it.getDouble(3),
+                    averageSpeed = it.getDouble(4),
+                    maxSpeed = it.getDouble(5)
+                )
+            }
+        }
+
+        return null
+    }
+
+    fun getLastCompletedTrip():
+        TripSummary? {
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT
+                    id,
+                    start_time,
+                    end_time,
+                    distance_km,
+                    average_speed,
+                    max_speed
+                FROM trips
+                WHERE completed = 1
+                ORDER BY end_time DESC
+                LIMIT 1
+                """,
                 null
             )
 
-        return cursor.use {
+        cursor.use {
 
             if (it.moveToFirst()) {
-                it.getDouble(0)
-            } else {
-                0.0
+
+                return TripSummary(
+                    id = it.getLong(0),
+                    startTime = it.getLong(1),
+                    endTime = it.getLong(2),
+                    distanceKm = it.getDouble(3),
+                    averageSpeed = it.getDouble(4),
+                    maxSpeed = it.getDouble(5)
+                )
             }
         }
+
+        return null
     }
 
-    private fun getStartOfToday(): Long {
+    // =====================================================
+    // ODOMETER
+    // =====================================================
+
+    fun getTotalOdometer():
+        Double {
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT COALESCE(
+                    SUM(distance_km),
+                    0
+                )
+                FROM trips
+                WHERE completed = 1
+                """,
+                null
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+                return it.getDouble(0)
+            }
+        }
+
+        return 0.0
+    }
+
+    fun getTodayDistance():
+        Double {
 
         val format =
             SimpleDateFormat(
@@ -799,8 +613,33 @@ class OdometerDatabaseHelper(
                 Date()
             )
 
-        return format.parse(
-            today
-        )?.time ?: System.currentTimeMillis()
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT COALESCE(
+                    SUM(distance_km),
+                    0
+                )
+                FROM trips
+                WHERE completed = 1
+                AND date(
+                    start_time / 1000,
+                    'unixepoch',
+                    'localtime'
+                ) = ?
+                """,
+                arrayOf(
+                    today
+                )
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+                return it.getDouble(0)
+            }
+        }
+
+        return 0.0
     }
 }
