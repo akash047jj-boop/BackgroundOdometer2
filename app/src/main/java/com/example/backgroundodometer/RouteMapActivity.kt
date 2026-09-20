@@ -1,6 +1,12 @@
 package com.example.backgroundodometer
 
+import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -10,6 +16,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class RouteMapActivity : AppCompatActivity() {
 
@@ -18,8 +25,27 @@ class RouteMapActivity : AppCompatActivity() {
 
     private var tripId: Long = -1L
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    private lateinit var statusText:
+        TextView
+
+    private lateinit var distanceText:
+        TextView
+
+    private val executor =
+        Executors.newSingleThreadExecutor()
+
+    private val mainHandler =
+        Handler(
+            Looper.getMainLooper()
+        )
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
+
+        super.onCreate(
+            savedInstanceState
+        )
 
         Configuration.getInstance()
             .load(
@@ -30,7 +56,8 @@ class RouteMapActivity : AppCompatActivity() {
                 )
             )
 
-        Configuration.getInstance().userAgentValue =
+        Configuration.getInstance()
+            .userAgentValue =
             packageName
 
         tripId =
@@ -40,6 +67,7 @@ class RouteMapActivity : AppCompatActivity() {
             )
 
         if (tripId <= 0L) {
+
             Toast.makeText(
                 this,
                 "Invalid trip",
@@ -47,23 +75,25 @@ class RouteMapActivity : AppCompatActivity() {
             ).show()
 
             finish()
+
             return
         }
 
         buildScreen()
+
         loadRoute()
     }
 
     private fun buildScreen() {
 
         val root =
-            android.widget.LinearLayout(this)
+            LinearLayout(this)
 
         root.orientation =
-            android.widget.LinearLayout.VERTICAL
+            LinearLayout.VERTICAL
 
         root.setBackgroundColor(
-            android.graphics.Color.BLACK
+            Color.BLACK
         )
 
         val title =
@@ -72,48 +102,110 @@ class RouteMapActivity : AppCompatActivity() {
         title.text =
             "TRIP ROUTE"
 
-        title.textSize = 20f
+        title.textSize =
+            20f
 
         title.setTextColor(
-            android.graphics.Color.WHITE
+            Color.WHITE
         )
 
         title.setPadding(
             20,
             20,
             20,
-            20
+            10
         )
 
         root.addView(
             title,
-            android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
-        map = MapView(this)
+        statusText =
+            TextView(this)
+
+        statusText.text =
+            "ROAD MATCHING..."
+
+        statusText.textSize =
+            15f
+
+        statusText.setTextColor(
+            Color.LTGRAY
+        )
+
+        statusText.setPadding(
+            20,
+            5,
+            20,
+            5
+        )
+
+        root.addView(
+            statusText,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        distanceText =
+            TextView(this)
+
+        distanceText.text =
+            "MATCHED ROAD DISTANCE: --"
+
+        distanceText.textSize =
+            17f
+
+        distanceText.setTextColor(
+            Color.WHITE
+        )
+
+        distanceText.setPadding(
+            20,
+            5,
+            20,
+            10
+        )
+
+        root.addView(
+            distanceText,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        map =
+            MapView(this)
 
         map.setTileSource(
             TileSourceFactory.MAPNIK
         )
 
-        map.setMultiTouchControls(true)
+        map.setMultiTouchControls(
+            true
+        )
 
-        map.setBuiltInZoomControls(true)
+        map.setBuiltInZoomControls(
+            true
+        )
 
         root.addView(
             map,
-            android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
         )
 
         val backButton =
-            android.widget.Button(this)
+            Button(this)
 
         backButton.text =
             "BACK"
@@ -124,13 +216,15 @@ class RouteMapActivity : AppCompatActivity() {
 
         root.addView(
             backButton,
-            android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
-        setContentView(root)
+        setContentView(
+            root
+        )
     }
 
     private fun loadRoute() {
@@ -140,18 +234,18 @@ class RouteMapActivity : AppCompatActivity() {
                 applicationContext
             )
 
-        val points =
+        val rawPoints =
             database.getTrackPoints(
                 tripId
             )
 
-        if (points.isEmpty()) {
+        if (rawPoints.isEmpty()) {
 
-            Toast.makeText(
-                this,
-                "No GPS route recorded for this trip",
-                Toast.LENGTH_LONG
-            ).show()
+            statusText.text =
+                "NO GPS ROUTE RECORDED"
+
+            distanceText.text =
+                "MATCHED ROAD DISTANCE: --"
 
             return
         }
@@ -159,7 +253,7 @@ class RouteMapActivity : AppCompatActivity() {
         val geoPoints =
             ArrayList<GeoPoint>()
 
-        for (point in points) {
+        for (point in rawPoints) {
 
             geoPoints.add(
                 GeoPoint(
@@ -169,28 +263,177 @@ class RouteMapActivity : AppCompatActivity() {
             )
         }
 
-        if (geoPoints.isEmpty()) {
+        if (geoPoints.size < 2) {
+
+            statusText.text =
+                "NOT ENOUGH GPS POINTS"
+
+            drawRawRoute(
+                geoPoints
+            )
+
             return
         }
 
         /*
-         * Draw the recorded GPS route.
-         *
-         * IMPORTANT:
-         * Use Polyline() instead of Polyline(this).
-         *
-         * This avoids the constructor mismatch with
-         * the osmdroid version used by this project.
+         * First try cached map matching.
          */
+        val cached =
+            MapMatchingHelper
+                .getCachedResult(
+                    applicationContext,
+                    tripId
+                )
+
+        if (cached != null) {
+
+            statusText.text =
+                "ROAD MATCHED • CACHED"
+
+            showMatchedDistance(
+                cached.distanceMeters
+            )
+
+            drawMatchedRoute(
+                cached.points
+            )
+
+            return
+        }
+
+        /*
+         * Show the raw GPS route immediately
+         * while matching is running.
+         */
+        statusText.text =
+            "MATCHING GPS TO ROADS..."
+
+        drawRawRoute(
+            geoPoints
+        )
+
+        executor.execute {
+
+            val result =
+                MapMatchingHelper.match(
+                    geoPoints
+                )
+
+            mainHandler.post {
+
+                if (
+                    isFinishing ||
+                    isDestroyed
+                ) {
+                    return@post
+                }
+
+                if (result != null) {
+
+                    MapMatchingHelper
+                        .saveCachedResult(
+                            applicationContext,
+                            tripId,
+                            result
+                        )
+
+                    statusText.text =
+                        String.format(
+                            Locale.US,
+                            "ROAD MATCHED • %.0f%% CONFIDENCE",
+                            result.confidence * 100.0
+                        )
+
+                    showMatchedDistance(
+                        result.distanceMeters
+                    )
+
+                    drawMatchedRoute(
+                        result.points
+                    )
+
+                } else {
+
+                    statusText.text =
+                        "ROAD MATCHING FAILED • GPS ROUTE SHOWN"
+
+                    distanceText.text =
+                        "MATCHED ROAD DISTANCE: --"
+
+                    /*
+                     * Raw GPS route remains visible.
+                     */
+                    drawRawRoute(
+                        geoPoints
+                    )
+                }
+            }
+        }
+    }
+
+    private fun showMatchedDistance(
+        meters: Double
+    ) {
+
+        val km =
+            meters / 1000.0
+
+        distanceText.text =
+            String.format(
+                Locale.US,
+                "MATCHED ROAD DISTANCE: %.2f km",
+                km
+            )
+    }
+
+    private fun clearRouteOverlays() {
+
+        val toRemove =
+            ArrayList<Any>()
+
+        for (
+            overlay in map.overlays
+        ) {
+
+            if (
+                overlay is Polyline
+            ) {
+
+                toRemove.add(
+                    overlay
+                )
+            }
+        }
+
+        for (
+            overlay in toRemove
+        ) {
+
+            map.overlays.remove(
+                overlay
+            )
+        }
+    }
+
+    private fun drawRawRoute(
+        points: List<GeoPoint>
+    ) {
+
+        if (points.isEmpty()) {
+            return
+        }
+
+        clearRouteOverlays()
+
         val route =
             Polyline()
 
         route.setPoints(
-            geoPoints
+            points
         )
 
         route.outlinePaint.strokeWidth =
-            8f
+            7f
 
         route.outlinePaint.isAntiAlias =
             true
@@ -202,7 +445,41 @@ class RouteMapActivity : AppCompatActivity() {
         map.invalidate()
 
         showRouteOnScreen(
-            geoPoints
+            points
+        )
+    }
+
+    private fun drawMatchedRoute(
+        points: List<GeoPoint>
+    ) {
+
+        if (points.isEmpty()) {
+            return
+        }
+
+        clearRouteOverlays()
+
+        val route =
+            Polyline()
+
+        route.setPoints(
+            points
+        )
+
+        route.outlinePaint.strokeWidth =
+            9f
+
+        route.outlinePaint.isAntiAlias =
+            true
+
+        map.overlays.add(
+            route
+        )
+
+        map.invalidate()
+
+        showRouteOnScreen(
+            points
         )
     }
 
@@ -213,13 +490,6 @@ class RouteMapActivity : AppCompatActivity() {
         if (points.isEmpty()) {
             return
         }
-
-        /*
-         * Calculate the route bounds manually.
-         * This avoids depending on different
-         * BoundingBox helper APIs between osmdroid
-         * versions.
-         */
 
         var minLat =
             points[0].latitude
@@ -233,24 +503,34 @@ class RouteMapActivity : AppCompatActivity() {
         var maxLon =
             points[0].longitude
 
-        for (point in points) {
+        for (
+            point in points
+        ) {
 
-            if (point.latitude < minLat) {
+            if (
+                point.latitude < minLat
+            ) {
                 minLat =
                     point.latitude
             }
 
-            if (point.latitude > maxLat) {
+            if (
+                point.latitude > maxLat
+            ) {
                 maxLat =
                     point.latitude
             }
 
-            if (point.longitude < minLon) {
+            if (
+                point.longitude < minLon
+            ) {
                 minLon =
                     point.longitude
             }
 
-            if (point.longitude > maxLon) {
+            if (
+                point.longitude > maxLon
+            ) {
                 maxLon =
                     point.longitude
             }
@@ -268,10 +548,6 @@ class RouteMapActivity : AppCompatActivity() {
                 centerLon
             )
         )
-
-        /*
-         * Choose a reasonable zoom.
-         */
 
         val latSpan =
             maxLat - minLat
@@ -325,6 +601,7 @@ class RouteMapActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
+
         super.onResume()
 
         if (::map.isInitialized) {
@@ -342,6 +619,8 @@ class RouteMapActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+
+        executor.shutdownNow()
 
         if (::map.isInitialized) {
             map.onDetach()
