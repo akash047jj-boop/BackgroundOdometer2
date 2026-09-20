@@ -20,15 +20,22 @@ import java.util.concurrent.Executors
 
 class RouteMapActivity : AppCompatActivity() {
 
-    private lateinit var map: MapView
-    private lateinit var database: OdometerDatabaseHelper
+    private lateinit var map:
+        MapView
 
-    private var tripId: Long = -1L
+    private lateinit var database:
+        OdometerDatabaseHelper
+
+    private var tripId:
+        Long = -1L
 
     private lateinit var statusText:
         TextView
 
     private lateinit var distanceText:
+        TextView
+
+    private lateinit var gpsDistanceText:
         TextView
 
     private val executor =
@@ -66,7 +73,9 @@ class RouteMapActivity : AppCompatActivity() {
                 -1L
             )
 
-        if (tripId <= 0L) {
+        if (
+            tripId <= 0L
+        ) {
 
             Toast.makeText(
                 this,
@@ -128,7 +137,7 @@ class RouteMapActivity : AppCompatActivity() {
             TextView(this)
 
         statusText.text =
-            "ROAD MATCHING..."
+            "LOADING..."
 
         statusText.textSize =
             15f
@@ -156,7 +165,7 @@ class RouteMapActivity : AppCompatActivity() {
             TextView(this)
 
         distanceText.text =
-            "MATCHED ROAD DISTANCE: --"
+            "ROAD DISTANCE: --"
 
         distanceText.textSize =
             17f
@@ -169,11 +178,39 @@ class RouteMapActivity : AppCompatActivity() {
             20,
             5,
             20,
-            10
+            5
         )
 
         root.addView(
             distanceText,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        gpsDistanceText =
+            TextView(this)
+
+        gpsDistanceText.text =
+            "GPS DISTANCE: --"
+
+        gpsDistanceText.textSize =
+            15f
+
+        gpsDistanceText.setTextColor(
+            Color.LTGRAY
+        )
+
+        gpsDistanceText.setPadding(
+            20,
+            5,
+            20,
+            10
+        )
+
+        root.addView(
+            gpsDistanceText,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -234,28 +271,81 @@ class RouteMapActivity : AppCompatActivity() {
                 applicationContext
             )
 
+        val trip =
+            database.getTrip(
+                tripId
+            )
+
+        if (
+            trip != null
+        ) {
+
+            distanceText.text =
+                String.format(
+                    Locale.US,
+                    "ROAD DISTANCE: %.2f km",
+                    if (
+                        trip.roadDistanceKm > 0.0
+                    ) {
+
+                        trip.roadDistanceKm
+
+                    } else {
+
+                        trip.distanceKm
+                    }
+                )
+
+            gpsDistanceText.text =
+                String.format(
+                    Locale.US,
+                    "GPS DISTANCE: %.2f km",
+                    trip.gpsDistanceKm
+                )
+
+            if (
+                trip.distanceSource ==
+                "ROAD"
+            ) {
+
+                statusText.text =
+                    String.format(
+                        Locale.US,
+                        "ROAD MATCHED • %.0f%% CONFIDENCE",
+                        trip.matchingConfidence *
+                            100.0
+                    )
+
+            } else {
+
+                statusText.text =
+                    "GPS DISTANCE USED"
+            }
+        }
+
         val rawPoints =
             database.getTrackPoints(
                 tripId
             )
 
-        if (rawPoints.isEmpty()) {
+        if (
+            rawPoints.isEmpty()
+        ) {
 
             statusText.text =
                 "NO GPS ROUTE RECORDED"
 
-            distanceText.text =
-                "MATCHED ROAD DISTANCE: --"
-
             return
         }
 
-        val geoPoints =
+        val rawGeoPoints =
             ArrayList<GeoPoint>()
 
-        for (point in rawPoints) {
+        for (
+            point in rawPoints
+        ) {
 
-            geoPoints.add(
+            rawGeoPoints.add(
                 GeoPoint(
                     point.latitude,
                     point.longitude
@@ -263,20 +353,19 @@ class RouteMapActivity : AppCompatActivity() {
             )
         }
 
-        if (geoPoints.size < 2) {
+        if (
+            rawGeoPoints.size < 2
+        ) {
 
-            statusText.text =
-                "NOT ENOUGH GPS POINTS"
-
-            drawRawRoute(
-                geoPoints
+            drawRoute(
+                rawGeoPoints
             )
 
             return
         }
 
         /*
-         * First try cached map matching.
+         * First use the cached V7 matched route.
          */
         val cached =
             MapMatchingHelper
@@ -285,16 +374,11 @@ class RouteMapActivity : AppCompatActivity() {
                     tripId
                 )
 
-        if (cached != null) {
+        if (
+            cached != null
+        ) {
 
-            statusText.text =
-                "ROAD MATCHED • CACHED"
-
-            showMatchedDistance(
-                cached.distanceMeters
-            )
-
-            drawMatchedRoute(
+            drawRoute(
                 cached.points
             )
 
@@ -302,21 +386,24 @@ class RouteMapActivity : AppCompatActivity() {
         }
 
         /*
-         * Show the raw GPS route immediately
-         * while matching is running.
+         * If there is no cached route, match
+         * the complete GPS trace for display.
+         *
+         * This does not alter the already stored
+         * authoritative trip distance.
          */
         statusText.text =
-            "MATCHING GPS TO ROADS..."
+            "MATCHING ROUTE..."
 
-        drawRawRoute(
-            geoPoints
+        drawRoute(
+            rawGeoPoints
         )
 
         executor.execute {
 
             val result =
                 MapMatchingHelper.match(
-                    geoPoints
+                    rawGeoPoints
                 )
 
             mainHandler.post {
@@ -325,10 +412,13 @@ class RouteMapActivity : AppCompatActivity() {
                     isFinishing ||
                     isDestroyed
                 ) {
+
                     return@post
                 }
 
-                if (result != null) {
+                if (
+                    result != null
+                ) {
 
                     MapMatchingHelper
                         .saveCachedResult(
@@ -337,58 +427,41 @@ class RouteMapActivity : AppCompatActivity() {
                             result
                         )
 
-                    statusText.text =
-                        String.format(
-                            Locale.US,
-                            "ROAD MATCHED • %.0f%% CONFIDENCE",
-                            result.confidence * 100.0
-                        )
-
-                    showMatchedDistance(
-                        result.distanceMeters
-                    )
-
-                    drawMatchedRoute(
+                    drawRoute(
                         result.points
                     )
+
+                    if (
+                        trip?.distanceSource ==
+                        "ROAD"
+                    ) {
+
+                        statusText.text =
+                            String.format(
+                                Locale.US,
+                                "ROAD MATCHED • %.0f%% CONFIDENCE",
+                                trip.matchingConfidence *
+                                    100.0
+                            )
+
+                    } else {
+
+                        statusText.text =
+                            "GPS DISTANCE USED"
+                    }
 
                 } else {
 
                     statusText.text =
-                        "ROAD MATCHING FAILED • GPS ROUTE SHOWN"
-
-                    distanceText.text =
-                        "MATCHED ROAD DISTANCE: --"
-
-                    /*
-                     * Raw GPS route remains visible.
-                     */
-                    drawRawRoute(
-                        geoPoints
-                    )
+                        "GPS ROUTE SHOWN"
                 }
             }
         }
     }
 
-    private fun showMatchedDistance(
-        meters: Double
-    ) {
-
-        val km =
-            meters / 1000.0
-
-        distanceText.text =
-            String.format(
-                Locale.US,
-                "MATCHED ROAD DISTANCE: %.2f km",
-                km
-            )
-    }
-
     private fun clearRouteOverlays() {
 
-        val toRemove =
+        val removeList =
             ArrayList<Any>()
 
         for (
@@ -399,14 +472,14 @@ class RouteMapActivity : AppCompatActivity() {
                 overlay is Polyline
             ) {
 
-                toRemove.add(
+                removeList.add(
                     overlay
                 )
             }
         }
 
         for (
-            overlay in toRemove
+            overlay in removeList
         ) {
 
             map.overlays.remove(
@@ -415,11 +488,14 @@ class RouteMapActivity : AppCompatActivity() {
         }
     }
 
-    private fun drawRawRoute(
+    private fun drawRoute(
         points: List<GeoPoint>
     ) {
 
-        if (points.isEmpty()) {
+        if (
+            points.isEmpty()
+        ) {
+
             return
         }
 
@@ -433,41 +509,7 @@ class RouteMapActivity : AppCompatActivity() {
         )
 
         route.outlinePaint.strokeWidth =
-            7f
-
-        route.outlinePaint.isAntiAlias =
-            true
-
-        map.overlays.add(
-            route
-        )
-
-        map.invalidate()
-
-        showRouteOnScreen(
-            points
-        )
-    }
-
-    private fun drawMatchedRoute(
-        points: List<GeoPoint>
-    ) {
-
-        if (points.isEmpty()) {
-            return
-        }
-
-        clearRouteOverlays()
-
-        val route =
-            Polyline()
-
-        route.setPoints(
-            points
-        )
-
-        route.outlinePaint.strokeWidth =
-            9f
+            8f
 
         route.outlinePaint.isAntiAlias =
             true
@@ -487,7 +529,10 @@ class RouteMapActivity : AppCompatActivity() {
         points: List<GeoPoint>
     ) {
 
-        if (points.isEmpty()) {
+        if (
+            points.isEmpty()
+        ) {
+
             return
         }
 
@@ -510,6 +555,7 @@ class RouteMapActivity : AppCompatActivity() {
             if (
                 point.latitude < minLat
             ) {
+
                 minLat =
                     point.latitude
             }
@@ -517,6 +563,7 @@ class RouteMapActivity : AppCompatActivity() {
             if (
                 point.latitude > maxLat
             ) {
+
                 maxLat =
                     point.latitude
             }
@@ -524,6 +571,7 @@ class RouteMapActivity : AppCompatActivity() {
             if (
                 point.longitude < minLon
             ) {
+
                 minLon =
                     point.longitude
             }
@@ -531,16 +579,23 @@ class RouteMapActivity : AppCompatActivity() {
             if (
                 point.longitude > maxLon
             ) {
+
                 maxLon =
                     point.longitude
             }
         }
 
         val centerLat =
-            (minLat + maxLat) / 2.0
+            (
+                minLat +
+                    maxLat
+                ) / 2.0
 
         val centerLon =
-            (minLon + maxLon) / 2.0
+            (
+                minLon +
+                    maxLon
+                ) / 2.0
 
         map.controller.setCenter(
             GeoPoint(
@@ -550,10 +605,12 @@ class RouteMapActivity : AppCompatActivity() {
         )
 
         val latSpan =
-            maxLat - minLat
+            maxLat -
+                minLat
 
         val lonSpan =
-            maxLon - minLon
+            maxLon -
+                minLon
 
         val largestSpan =
             maxOf(
@@ -604,14 +661,20 @@ class RouteMapActivity : AppCompatActivity() {
 
         super.onResume()
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
+
             map.onResume()
         }
     }
 
     override fun onPause() {
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
+
             map.onPause()
         }
 
@@ -622,7 +685,10 @@ class RouteMapActivity : AppCompatActivity() {
 
         executor.shutdownNow()
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
+
             map.onDetach()
         }
 
