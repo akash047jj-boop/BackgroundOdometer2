@@ -7,7 +7,8 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import kotlin.math.*
+import kotlin.math.max
+import kotlin.math.min
 
 data class MapMatchingResult(
     val points: List<GeoPoint>,
@@ -28,6 +29,15 @@ object MapMatchingHelper {
 
     private const val READ_TIMEOUT =
         30000
+
+    private const val MAX_GAP_SECONDS =
+        20L
+
+    private const val MIN_ACCURACY =
+        3.0
+
+    private const val MAX_ACCURACY =
+        50.0
 
     private fun cacheFile(
         context: Context,
@@ -83,30 +93,26 @@ object MapMatchingHelper {
             val points =
                 ArrayList<GeoPoint>()
 
-            for (i in 0 until pointsArray.length()) {
+            for (
+                i in 0 until pointsArray.length()
+            ) {
 
                 val item =
                     pointsArray.getJSONObject(i)
 
-                val latitude =
-                    item.getDouble(
-                        "latitude"
-                    )
-
-                val longitude =
-                    item.getDouble(
-                        "longitude"
-                    )
-
                 points.add(
                     GeoPoint(
-                        latitude,
-                        longitude
+                        item.getDouble(
+                            "latitude"
+                        ),
+                        item.getDouble(
+                            "longitude"
+                        )
                     )
                 )
             }
 
-            if (points.isEmpty()) {
+            if (points.size < 2) {
                 return null
             }
 
@@ -117,7 +123,7 @@ object MapMatchingHelper {
             )
 
         } catch (
-            e: Exception
+            _: Exception
         ) {
 
             null
@@ -148,7 +154,9 @@ object MapMatchingHelper {
             val pointsArray =
                 org.json.JSONArray()
 
-            for (point in result.points) {
+            for (
+                point in result.points
+            ) {
 
                 val item =
                     JSONObject()
@@ -183,11 +191,16 @@ object MapMatchingHelper {
         } catch (
             _: Exception
         ) {
-            // Cache failure should never
-            // break route display.
+            // Cache failure must not break
+            // tracking or route display.
         }
     }
 
+    /*
+     * V6-compatible method.
+     *
+     * Used by RouteMapActivity.
+     */
     fun match(
         points: List<GeoPoint>
     ): MapMatchingResult? {
@@ -196,7 +209,244 @@ object MapMatchingHelper {
             return null
         }
 
-        val allMatchedPoints =
+        val inputs =
+            points.mapIndexed {
+                    index,
+                    point ->
+
+                MatchInput(
+                    latitude =
+                        point.latitude,
+
+                    longitude =
+                        point.longitude,
+
+                    timeSeconds =
+                        index.toLong() * 2L,
+
+                    accuracy =
+                        10.0
+                )
+            }
+
+        return matchInputs(
+            inputs
+        )
+    }
+
+    /*
+     * V7 authoritative matching.
+     *
+     * Only points whose recorded speed is at or
+     * above the odometer threshold are used.
+     *
+     * This preserves the V6 rule that the odometer
+     * should not accumulate below the threshold.
+     */
+    fun matchTrip(
+        points: List<TrackPoint>,
+        speedThreshold: Double
+    ): MapMatchingResult? {
+
+        if (points.size < 2) {
+            return null
+        }
+
+        val segments =
+            mutableListOf<
+                MutableList<MatchInput>
+            >()
+
+        var currentSegment =
+            mutableListOf<MatchInput>()
+
+        var previousTime =
+            -1L
+
+        for (point in points) {
+
+            if (
+                point.speedKmh <
+                speedThreshold
+            ) {
+
+                if (
+                    currentSegment.size >= 2
+                ) {
+
+                    segments.add(
+                        currentSegment
+                    )
+                }
+
+                currentSegment =
+                    mutableListOf()
+
+                previousTime =
+                    -1L
+
+                continue
+            }
+
+            val timeSeconds =
+                point.time / 1000L
+
+            if (
+                previousTime >= 0 &&
+                timeSeconds -
+                    previousTime >
+                MAX_GAP_SECONDS
+            ) {
+
+                if (
+                    currentSegment.size >= 2
+                ) {
+
+                    segments.add(
+                        currentSegment
+                    )
+                }
+
+                currentSegment =
+                    mutableListOf()
+            }
+
+            currentSegment.add(
+                MatchInput(
+                    latitude =
+                        point.latitude,
+
+                    longitude =
+                        point.longitude,
+
+                    timeSeconds =
+                        timeSeconds,
+
+                    accuracy =
+                        point.accuracy
+                )
+            )
+
+            previousTime =
+                timeSeconds
+        }
+
+        if (
+            currentSegment.size >= 2
+        ) {
+
+            segments.add(
+                currentSegment
+            )
+        }
+
+        if (segments.isEmpty()) {
+            return null
+        }
+
+        val allPoints =
+            ArrayList<GeoPoint>()
+
+        var totalDistance =
+            0.0
+
+        var confidenceTotal =
+            0.0
+
+        var confidenceCount =
+            0
+
+        for (
+            segment in segments
+        ) {
+
+            if (segment.size < 2) {
+                continue
+            }
+
+            val result =
+                matchInputs(
+                    segment
+                )
+                    ?: continue
+
+            if (
+                allPoints.isEmpty()
+            ) {
+
+                allPoints.addAll(
+                    result.points
+                )
+
+            } else {
+
+                allPoints.addAll(
+                    result.points.drop(1)
+                )
+            }
+
+            totalDistance +=
+                result.distanceMeters
+
+            if (
+                result.confidence > 0.0
+            ) {
+
+                confidenceTotal +=
+                    result.confidence
+
+                confidenceCount++
+            }
+        }
+
+        if (
+            allPoints.size < 2
+        ) {
+
+            return null
+        }
+
+        val confidence =
+            if (
+                confidenceCount > 0
+            ) {
+
+                confidenceTotal /
+                    confidenceCount
+
+            } else {
+
+                0.0
+            }
+
+        return MapMatchingResult(
+            points =
+                allPoints,
+
+            distanceMeters =
+                totalDistance,
+
+            confidence =
+                confidence
+        )
+    }
+
+    private data class MatchInput(
+        val latitude: Double,
+        val longitude: Double,
+        val timeSeconds: Long,
+        val accuracy: Double
+    )
+
+    private fun matchInputs(
+        inputs: List<MatchInput>
+    ): MapMatchingResult? {
+
+        if (inputs.size < 2) {
+            return null
+        }
+
+        val allPoints =
             ArrayList<GeoPoint>()
 
         var totalDistance =
@@ -209,52 +459,59 @@ object MapMatchingHelper {
             0
 
         /*
-         * OSRM map matching normally accepts
-         * up to 100 locations.
+         * Overlap chunks by one point.
          *
-         * Split larger trips into chunks.
+         * 0..99
+         * 99..198
+         * etc.
+         *
+         * This prevents a gap between chunks.
          */
-
         var start =
             0
 
-        while (start < points.size - 1) {
+        while (
+            start <
+            inputs.size - 1
+        ) {
 
             val end =
                 min(
                     start +
-                            MAX_POINTS_PER_REQUEST,
-                    points.size
+                        MAX_POINTS_PER_REQUEST,
+                    inputs.size
                 )
 
             val chunk =
-                points.subList(
+                inputs.subList(
                     start,
                     end
                 )
 
-            if (chunk.size >= 2) {
+            if (
+                chunk.size >= 2
+            ) {
 
                 val result =
                     matchChunk(
                         chunk
                     )
 
-                if (result != null) {
+                if (
+                    result != null
+                ) {
 
-                    /*
-                     * Avoid duplicating the first
-                     * point when chunks meet.
-                     */
-                    if (allMatchedPoints.isEmpty()) {
+                    if (
+                        allPoints.isEmpty()
+                    ) {
 
-                        allMatchedPoints.addAll(
+                        allPoints.addAll(
                             result.points
                         )
 
                     } else {
 
-                        allMatchedPoints.addAll(
+                        allPoints.addAll(
                             result.points.drop(1)
                         )
                     }
@@ -262,7 +519,9 @@ object MapMatchingHelper {
                     totalDistance +=
                         result.distanceMeters
 
-                    if (result.confidence > 0.0) {
+                    if (
+                        result.confidence > 0.0
+                    ) {
 
                         confidenceTotal +=
                             result.confidence
@@ -272,40 +531,54 @@ object MapMatchingHelper {
                 }
             }
 
+            /*
+             * Overlap the next request by one
+             * input point.
+             */
             start =
-                end
+                end - 1
         }
 
-        if (allMatchedPoints.size < 2) {
+        if (
+            allPoints.size < 2
+        ) {
+
             return null
         }
 
-        val averageConfidence =
-            if (confidenceCount > 0) {
+        val confidence =
+            if (
+                confidenceCount > 0
+            ) {
+
                 confidenceTotal /
-                        confidenceCount
+                    confidenceCount
+
             } else {
+
                 0.0
             }
 
         return MapMatchingResult(
             points =
-                allMatchedPoints,
+                allPoints,
+
             distanceMeters =
                 totalDistance,
+
             confidence =
-                averageConfidence
+                confidence
         )
     }
 
     private fun matchChunk(
-        points: List<GeoPoint>
+        inputs: List<MatchInput>
     ): MapMatchingResult? {
 
         return try {
 
             val coordinates =
-                points.joinToString(";") {
+                inputs.joinToString(";") {
 
                     String.format(
                         Locale.US,
@@ -315,20 +588,52 @@ object MapMatchingHelper {
                     )
                 }
 
+            val timestamps =
+                inputs.joinToString(";") {
+                    it.timeSeconds
+                        .toString()
+                }
+
+            val radiuses =
+                inputs.joinToString(";") {
+
+                    val accuracy =
+                        if (
+                            it.accuracy > 0.0
+                        ) {
+
+                            it.accuracy
+
+                        } else {
+
+                            10.0
+                        }
+
+                    max(
+                        MIN_ACCURACY,
+                        min(
+                            MAX_ACCURACY,
+                            accuracy
+                        )
+                    ).toString()
+                }
+
             val urlString =
                 "$OSRM_URL/match/v1/driving/" +
-                        "$coordinates" +
-                        "?overview=full" +
-                        "&geometries=geojson" +
-                        "&steps=false" +
-                        "&gaps=split" +
-                        "&tidy=true"
+                    coordinates +
+                    "?overview=full" +
+                    "&geometries=geojson" +
+                    "&steps=false" +
+                    "&gaps=split" +
+                    "&tidy=true" +
+                    "&timestamps=$timestamps" +
+                    "&radiuses=$radiuses"
 
             val connection =
                 URL(
                     urlString
                 ).openConnection()
-                        as HttpURLConnection
+                    as HttpURLConnection
 
             connection.requestMethod =
                 "GET"
@@ -341,7 +646,7 @@ object MapMatchingHelper {
 
             connection.setRequestProperty(
                 "User-Agent",
-                "BackgroundOdometer/6.0"
+                "BackgroundOdometer/7.0"
             )
 
             connection.setRequestProperty(
@@ -352,7 +657,9 @@ object MapMatchingHelper {
             val responseCode =
                 connection.responseCode
 
-            if (responseCode != 200) {
+            if (
+                responseCode != 200
+            ) {
 
                 connection.disconnect()
 
@@ -396,6 +703,7 @@ object MapMatchingHelper {
                     "code"
                 ) != "Ok"
             ) {
+
                 return null
             }
 
@@ -418,7 +726,8 @@ object MapMatchingHelper {
                 0
 
             for (
-                i in 0 until matchings.length()
+                i in 0 until
+                    matchings.length()
             ) {
 
                 val matching =
@@ -438,7 +747,9 @@ object MapMatchingHelper {
                         0.0
                     )
 
-                if (confidence > 0.0) {
+                if (
+                    confidence > 0.0
+                ) {
 
                     confidenceTotal +=
                         confidence
@@ -459,7 +770,8 @@ object MapMatchingHelper {
                         ?: continue
 
                 for (
-                    j in 0 until coordinates.length()
+                    j in 0 until
+                        coordinates.length()
                 ) {
 
                     val coordinate =
@@ -474,10 +786,14 @@ object MapMatchingHelper {
                     }
 
                     val longitude =
-                        coordinate.getDouble(0)
+                        coordinate.getDouble(
+                            0
+                        )
 
                     val latitude =
-                        coordinate.getDouble(1)
+                        coordinate.getDouble(
+                            1
+                        )
 
                     matchedPoints.add(
                         GeoPoint(
@@ -488,23 +804,33 @@ object MapMatchingHelper {
                 }
             }
 
-            if (matchedPoints.size < 2) {
+            if (
+                matchedPoints.size < 2
+            ) {
+
                 return null
             }
 
             val confidence =
-                if (confidenceCount > 0) {
+                if (
+                    confidenceCount > 0
+                ) {
+
                     confidenceTotal /
-                            confidenceCount
+                        confidenceCount
+
                 } else {
+
                     0.0
                 }
 
             MapMatchingResult(
                 points =
                     matchedPoints,
+
                 distanceMeters =
                     totalDistance,
+
                 confidence =
                     confidence
             )
