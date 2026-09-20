@@ -18,17 +18,24 @@ import java.util.Locale
 
 class TripsActivity : Activity() {
 
-    private lateinit var database: OdometerDatabaseHelper
-    private lateinit var listContainer: LinearLayout
+    private lateinit var database:
+        OdometerDatabaseHelper
+
+    private lateinit var list:
+        LinearLayout
 
     companion object {
-        private const val TIFFANY = "#00BCD4"
-        private const val CARD = "#151515"
+        private const val TIFFANY =
+            "#00BCD4"
+
+        private const val CARD =
+            "#151515"
     }
 
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
+
         super.onCreate(savedInstanceState)
 
         database =
@@ -38,10 +45,6 @@ class TripsActivity : Activity() {
 
         loadTrips()
     }
-
-    // =====================================================
-    // INTERFACE
-    // =====================================================
 
     private fun buildInterface() {
 
@@ -60,14 +63,10 @@ class TripsActivity : Activity() {
 
         root.setPadding(
             20,
-            55,
+            45,
             20,
-            40
+            35
         )
-
-        // =================================================
-        // TITLE
-        // =================================================
 
         val title =
             TextView(this)
@@ -76,7 +75,7 @@ class TripsActivity : Activity() {
             "TRIP HISTORY"
 
         title.textSize =
-            26f
+            27f
 
         title.setTextColor(
             Color.WHITE
@@ -95,14 +94,14 @@ class TripsActivity : Activity() {
 
         addSpace(
             root,
-            10
+            8
         )
 
         val subtitle =
             TextView(this)
 
         subtitle.text =
-            "Recorded GPS trips"
+            "All completed trips"
 
         subtitle.textSize =
             14f
@@ -124,10 +123,6 @@ class TripsActivity : Activity() {
             25
         )
 
-        // =================================================
-        // REFRESH
-        // =================================================
-
         val refresh =
             createAction(
                 "REFRESH"
@@ -139,7 +134,7 @@ class TripsActivity : Activity() {
 
         root.addView(
             refresh,
-            fullWidthParams(58)
+            fullParams(58)
         )
 
         addSpace(
@@ -147,24 +142,16 @@ class TripsActivity : Activity() {
             20
         )
 
-        // =================================================
-        // LIST
-        // =================================================
-
-        listContainer =
+        list =
             LinearLayout(this)
 
-        listContainer.orientation =
+        list.orientation =
             LinearLayout.VERTICAL
 
         root.addView(
-            listContainer,
+            list,
             wrapParams()
         )
-
-        // =================================================
-        // BACK
-        // =================================================
 
         addSpace(
             root,
@@ -182,7 +169,7 @@ class TripsActivity : Activity() {
 
         root.addView(
             back,
-            fullWidthParams(58)
+            fullParams(58)
         )
 
         scroll.addView(
@@ -196,13 +183,9 @@ class TripsActivity : Activity() {
         setContentView(scroll)
     }
 
-    // =====================================================
-    // LOAD TRIPS
-    // =====================================================
-
     private fun loadTrips() {
 
-        listContainer.removeAllViews()
+        list.removeAllViews()
 
         val trips =
             database.getAllTrips()
@@ -227,12 +210,12 @@ class TripsActivity : Activity() {
 
             empty.setPadding(
                 10,
-                30,
+                35,
                 10,
-                30
+                35
             )
 
-            listContainer.addView(
+            list.addView(
                 empty,
                 wrapParams()
             )
@@ -242,15 +225,13 @@ class TripsActivity : Activity() {
 
         for (trip in trips) {
 
-            addTripCard(trip)
+            addTrip(
+                trip
+            )
         }
     }
 
-    // =====================================================
-    // TRIP CARD
-    // =====================================================
-
-    private fun addTripCard(
+    private fun addTrip(
         trip: TripSummary
     ) {
 
@@ -274,21 +255,14 @@ class TripsActivity : Activity() {
                     20f
 
                 setColor(
-                    Color.parseColor(
-                        CARD
-                    )
+                    Color.parseColor(CARD)
                 )
 
                 setStroke(
                     1,
-                    Color.parseColor(
-                        "#333333"
-                    )
+                    Color.DKGRAY
                 )
             }
-
-        card.isClickable =
-            true
 
         card.setOnClickListener {
 
@@ -306,10 +280,6 @@ class TripsActivity : Activity() {
             startActivity(intent)
         }
 
-        // -------------------------------------------------
-        // DATE
-        // -------------------------------------------------
-
         val date =
             TextView(this)
 
@@ -322,9 +292,7 @@ class TripsActivity : Activity() {
             17f
 
         date.setTextColor(
-            Color.parseColor(
-                TIFFANY
-            )
+            Color.parseColor(TIFFANY)
         )
 
         date.typeface =
@@ -335,14 +303,7 @@ class TripsActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            card,
-            8
-        )
-
-        // -------------------------------------------------
-        // DISTANCE
-        // -------------------------------------------------
+        addSpace(card, 7)
 
         val distance =
             TextView(this)
@@ -367,14 +328,7 @@ class TripsActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            card,
-            8
-        )
-
-        // -------------------------------------------------
-        // SPEED
-        // -------------------------------------------------
+        addSpace(card, 7)
 
         val speed =
             TextView(this)
@@ -398,26 +352,16 @@ class TripsActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            card,
-            5
-        )
-
-        // -------------------------------------------------
-        // TIME
-        // -------------------------------------------------
+        addSpace(card, 5)
 
         val time =
             TextView(this)
 
-        val end =
-            trip.endTime
-
         time.text =
-            if (end != null) {
+            if (trip.endTime > 0) {
 
                 "${formatTime(trip.startTime)} → " +
-                    formatTime(end)
+                    formatTime(trip.endTime)
 
             } else {
 
@@ -436,48 +380,44 @@ class TripsActivity : Activity() {
             wrapParams()
         )
 
-        listContainer.addView(
-            card,
-            fullWidthParams(0).apply {
-                height =
-                    ViewGroup.LayoutParams.WRAP_CONTENT
+        val params =
+            fullParams(0)
 
-                bottomMargin = 12
-            }
+        params.height =
+            ViewGroup.LayoutParams.WRAP_CONTENT
+
+        params.bottomMargin =
+            12
+
+        list.addView(
+            card,
+            params
         )
     }
 
-    // =====================================================
-    // FORMATTING
-    // =====================================================
-
     private fun formatDate(
-        timestamp: Long
+        time: Long
     ): String {
 
         return SimpleDateFormat(
             "dd MMM yyyy",
             Locale.getDefault()
         ).format(
-            Date(timestamp)
+            Date(time)
         )
     }
 
     private fun formatTime(
-        timestamp: Long
+        time: Long
     ): String {
 
         return SimpleDateFormat(
             "hh:mm a",
             Locale.getDefault()
         ).format(
-            Date(timestamp)
+            Date(time)
         )
     }
-
-    // =====================================================
-    // UI HELPERS
-    // =====================================================
 
     private fun createAction(
         text: String
@@ -485,11 +425,9 @@ class TripsActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
+            this.text = text
 
-            textSize =
-                16f
+            textSize = 16f
 
             setTextColor(
                 Color.WHITE
@@ -501,26 +439,18 @@ class TripsActivity : Activity() {
             gravity =
                 Gravity.CENTER
 
-            isClickable =
-                true
-
             background =
                 GradientDrawable().apply {
 
-                    cornerRadius =
-                        18f
+                    cornerRadius = 18f
 
                     setColor(
-                        Color.parseColor(
-                            CARD
-                        )
+                        Color.parseColor(CARD)
                     )
 
                     setStroke(
                         2,
-                        Color.parseColor(
-                            TIFFANY
-                        )
+                        Color.parseColor(TIFFANY)
                     )
                 }
         }
@@ -535,7 +465,7 @@ class TripsActivity : Activity() {
         )
     }
 
-    private fun fullWidthParams(
+    private fun fullParams(
         height: Int
     ): LinearLayout.LayoutParams {
 
@@ -550,11 +480,8 @@ class TripsActivity : Activity() {
         height: Int
     ) {
 
-        val space =
-            View(this)
-
         parent.addView(
-            space,
+            View(this),
             LinearLayout.LayoutParams(
                 1,
                 height
