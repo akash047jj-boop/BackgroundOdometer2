@@ -5,7 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
@@ -22,11 +25,11 @@ class LocationTrackingService : Service() {
         const val ACTION_SPEED_UPDATE =
             "com.example.backgroundodometer.SPEED_UPDATE"
 
-        const val EXTRA_SPEED =
-            "speed"
-
         const val ACTION_STOP =
             "com.example.backgroundodometer.STOP"
+
+        const val EXTRA_SPEED =
+            "speed"
 
         private const val CHANNEL_ID =
             "odometer_tracking"
@@ -46,10 +49,10 @@ class LocationTrackingService : Service() {
         private const val MAX_ACCURACY =
             40f
 
-        private const val MAX_JUMP =
+        private const val MAX_JUMP_METERS =
             300f
 
-        private const val MAX_SPEED =
+        private const val MAX_REASONABLE_SPEED =
             160.0
     }
 
@@ -59,11 +62,14 @@ class LocationTrackingService : Service() {
     private lateinit var database:
         OdometerDatabaseHelper
 
-    private var tripId:
+    private var currentTripId:
         Long? = null
 
     private var lastLocation:
         Location? = null
+
+    private var tracking =
+        false
 
     private var speedTotal =
         0.0
@@ -74,10 +80,35 @@ class LocationTrackingService : Service() {
     private var maxSpeed =
         0.0
 
-    private var tracking =
-        false
+    private val providerReceiver =
+        object : BroadcastReceiver() {
 
-    private val callback =
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?
+            ) {
+
+                if (
+                    intent?.action ==
+                    LocationManager
+                        .PROVIDERS_CHANGED_ACTION
+                ) {
+
+                    if (isGpsEnabled()) {
+
+                        if (!tracking) {
+                            startTracking()
+                        }
+
+                    } else {
+
+                        finalizeCurrentTrip()
+                    }
+                }
+            }
+        }
+
+    private val locationCallback =
         object : LocationCallback() {
 
             override fun onLocationResult(
@@ -87,6 +118,7 @@ class LocationTrackingService : Service() {
                 for (
                     location in result.locations
                 ) {
+
                     processLocation(
                         location
                     )
@@ -111,7 +143,16 @@ class LocationTrackingService : Service() {
 
         createNotificationChannel()
 
-        startForegroundServiceNotification()
+        startForegroundNotification()
+
+        ContextCompat.registerReceiver(
+            this,
+            providerReceiver,
+            IntentFilter(
+                LocationManager.PROVIDERS_CHANGED_ACTION
+            ),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onStartCommand(
@@ -125,19 +166,32 @@ class LocationTrackingService : Service() {
             ACTION_STOP
         ) {
 
-            stopTracking()
+            finalizeCurrentTrip()
 
             stopSelf()
 
             return START_NOT_STICKY
         }
 
-        startTracking()
+        if (isGpsEnabled()) {
+
+            startTracking()
+
+        } else {
+
+            updateNotification(
+                "GPS is OFF"
+            )
+        }
 
         return START_STICKY
     }
 
-    private fun startForegroundServiceNotification() {
+    // =====================================================
+    // FOREGROUND NOTIFICATION
+    // =====================================================
+
+    private fun startForegroundNotification() {
 
         val notification =
             createNotification(
@@ -197,12 +251,16 @@ class LocationTrackingService : Service() {
         )
     }
 
+    // =====================================================
+    // GPS
+    // =====================================================
+
     private fun isGpsEnabled():
         Boolean {
 
         val manager =
             getSystemService(
-                LOCATION_SERVICE
+                Context.LOCATION_SERVICE
             ) as LocationManager
 
         return try {
@@ -216,6 +274,10 @@ class LocationTrackingService : Service() {
             false
         }
     }
+
+    // =====================================================
+    // START LOCATION TRACKING
+    // =====================================================
 
     private fun startTracking() {
 
@@ -244,6 +306,11 @@ class LocationTrackingService : Service() {
             ) !=
             PackageManager.PERMISSION_GRANTED
         ) {
+
+            updateNotification(
+                "Location permission required"
+            )
+
             return
         }
 
@@ -267,7 +334,7 @@ class LocationTrackingService : Service() {
 
             fusedClient.requestLocationUpdates(
                 request,
-                callback,
+                locationCallback,
                 mainLooper
             )
 
@@ -279,12 +346,16 @@ class LocationTrackingService : Service() {
             speedCount = 0
             maxSpeed = 0.0
 
-            tripId =
+            /*
+             * Continue an unfinished trip if one exists.
+             * Otherwise create a new trip.
+             */
+            currentTripId =
                 database.getActiveTrip()
 
-            if (tripId == null) {
+            if (currentTripId == null) {
 
-                tripId =
+                currentTripId =
                     database.createTrip(
                         System.currentTimeMillis()
                     )
@@ -297,8 +368,16 @@ class LocationTrackingService : Service() {
         } catch (_: Exception) {
 
             tracking = false
+
+            updateNotification(
+                "Unable to start GPS"
+            )
         }
     }
+
+    // =====================================================
+    // LOCATION PROCESSING
+    // =====================================================
 
     private fun processLocation(
         location: Location
@@ -310,7 +389,7 @@ class LocationTrackingService : Service() {
 
         if (!isGpsEnabled()) {
 
-            stopTracking()
+            finalizeCurrentTrip()
 
             return
         }
@@ -343,7 +422,7 @@ class LocationTrackingService : Service() {
 
         if (previous != null) {
 
-            val distance =
+            val distanceMeters =
                 previous.distanceTo(
                     location
                 )
@@ -354,59 +433,80 @@ class LocationTrackingService : Service() {
                         previous.time
                     ) / 1000.0
 
-            if (seconds > 0) {
+            if (seconds <= 0.0) {
+                return
+            }
 
-                val calculatedSpeed =
-                    distance /
-                        seconds *
-                        3.6
+            val calculatedSpeed =
+                distanceMeters /
+                    seconds *
+                    3.6
 
-                if (
-                    !location.hasSpeed()
-                ) {
-                    speedKmh =
-                        calculatedSpeed
-                }
+            /*
+             * If Android does not provide a reliable speed,
+             * calculate it from the GPS points.
+             */
+            if (
+                !location.hasSpeed()
+            ) {
 
-                if (
-                    distance >
-                    MAX_JUMP
-                ) {
-                    return
-                }
+                speedKmh =
+                    calculatedSpeed
+            }
 
-                if (
-                    calculatedSpeed >
-                    MAX_SPEED
-                ) {
-                    return
-                }
+            /*
+             * Reject impossible GPS jumps.
+             */
+            if (
+                distanceMeters >
+                MAX_JUMP_METERS
+            ) {
 
-                val threshold =
-                    database
-                        .getSpeedThreshold()
+                return
+            }
 
-                if (
-                    speedKmh >= threshold
-                ) {
+            if (
+                calculatedSpeed >
+                MAX_REASONABLE_SPEED
+            ) {
 
-                    database.addToOdometer(
-                        distance / 1000.0
-                    )
-                }
+                return
+            }
+
+            /*
+             * Only movement at or above the configured
+             * threshold contributes to the odometer.
+             *
+             * The GPS point itself is still saved regardless
+             * of speed.
+             */
+            val threshold =
+                database.getSpeedThreshold()
+
+            if (
+                speedKmh >= threshold
+            ) {
+
+                database.addToOdometer(
+                    distanceMeters / 1000.0
+                )
             }
         }
 
-        val currentTrip =
-            tripId ?: return
+        val tripId =
+            currentTripId ?: return
 
+        /*
+         * Save EVERY valid GPS point.
+         */
         database.addTrackPoint(
-            currentTrip,
-            location.latitude,
-            location.longitude,
-            location.time,
-            speedKmh,
-            location.accuracy.toDouble()
+            tripId = tripId,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            time = location.time,
+            speed = speedKmh,
+            accuracy =
+                location.accuracy.toDouble()
         )
 
         speedTotal +=
@@ -417,6 +517,7 @@ class LocationTrackingService : Service() {
         if (
             speedKmh > maxSpeed
         ) {
+
             maxSpeed =
                 speedKmh
         }
@@ -429,60 +530,331 @@ class LocationTrackingService : Service() {
         )
 
         updateNotification(
-            "Speed %.1f km/h"
+            "Speed %.1f km/h • GPS active"
                 .format(speedKmh)
         )
     }
 
-    private fun stopTracking() {
+    // =====================================================
+    // FINALIZE TRIP
+    // =====================================================
+
+    private fun finalizeCurrentTrip() {
 
         try {
 
             fusedClient
                 .removeLocationUpdates(
-                    callback
+                    locationCallback
                 )
 
         } catch (_: Exception) {
         }
 
-        if (tracking) {
-
-            val currentTrip =
-                tripId
-
-            if (
-                currentTrip != null
-            ) {
-
-                val average =
-                    if (speedCount > 0) {
-                        speedTotal /
-                            speedCount
-                    } else {
-                        0.0
-                    }
-
-                database.completeTrip(
-                    currentTrip,
-                    0.0,
-                    average,
-                    maxSpeed,
-                    System.currentTimeMillis()
-                )
-            }
+        if (!tracking) {
+            return
         }
 
         tracking = false
 
-        tripId = null
+        val tripId =
+            currentTripId
+
+        currentTripId = null
 
         lastLocation = null
 
-        updateNotification(
-            "GPS tracking paused"
-        )
+        if (tripId == null) {
+
+            updateNotification(
+                "GPS tracking paused"
+            )
+
+            return
+        }
+
+        Thread {
+
+            finalizeTrip(
+                tripId
+            )
+
+        }.start()
     }
+
+    private fun finalizeTrip(
+        tripId: Long
+    ) {
+
+        try {
+
+            val points =
+                database.getTrackPoints(
+                    tripId
+                )
+
+            if (points.isEmpty()) {
+
+                database.completeTrip(
+                    tripId = tripId,
+                    distanceKm = 0.0,
+                    averageSpeed = 0.0,
+                    maxSpeed = 0.0,
+                    endTime =
+                        System.currentTimeMillis()
+                )
+
+                return
+            }
+
+            val threshold =
+                database.getSpeedThreshold()
+
+            val tripDistance =
+                calculateTripDistance(
+                    points,
+                    threshold
+                )
+
+            val averageSpeed =
+                if (points.isNotEmpty()) {
+
+                    points.sumOf {
+                        it.speedKmh
+                    } /
+                        points.size
+
+                } else {
+                    0.0
+                }
+
+            val maximumSpeed =
+                points.maxOfOrNull {
+                    it.speedKmh
+                } ?: 0.0
+
+            val endTime =
+                points.last().time
+
+            database.completeTrip(
+                tripId = tripId,
+                distanceKm =
+                    tripDistance,
+                averageSpeed =
+                    averageSpeed,
+                maxSpeed =
+                    maximumSpeed,
+                endTime =
+                    endTime
+            )
+
+            checkDistanceAlert()
+
+            updateNotification(
+                "Trip saved • %.2f km"
+                    .format(tripDistance)
+            )
+
+        } catch (_: Exception) {
+
+            updateNotification(
+                "Trip finalization error"
+            )
+        }
+    }
+
+    // =====================================================
+    // TRIP DISTANCE
+    // =====================================================
+
+    private fun calculateTripDistance(
+        points: List<TrackPoint>,
+        threshold: Double
+    ): Double {
+
+        if (points.size < 2) {
+            return 0.0
+        }
+
+        var totalMeters =
+            0.0
+
+        for (
+            index in 1 until points.size
+        ) {
+
+            val previous =
+                points[index - 1]
+
+            val current =
+                points[index]
+
+            /*
+             * Distance is counted only when the CURRENT
+             * point is at or above the odometer threshold.
+             */
+            if (
+                current.speedKmh <
+                threshold
+            ) {
+                continue
+            }
+
+            val distance =
+                haversineMeters(
+                    previous.latitude,
+                    previous.longitude,
+                    current.latitude,
+                    current.longitude
+                )
+
+            if (
+                distance > 0.0 &&
+                distance <=
+                MAX_JUMP_METERS
+            ) {
+
+                totalMeters +=
+                    distance
+            }
+        }
+
+        return totalMeters / 1000.0
+    }
+
+    // =====================================================
+    // HAVERSINE
+    // =====================================================
+
+    private fun haversineMeters(
+        latitude1: Double,
+        longitude1: Double,
+        latitude2: Double,
+        longitude2: Double
+    ): Double {
+
+        val earthRadius =
+            6_371_000.0
+
+        val lat1 =
+            Math.toRadians(
+                latitude1
+            )
+
+        val lat2 =
+            Math.toRadians(
+                latitude2
+            )
+
+        val deltaLat =
+            Math.toRadians(
+                latitude2 -
+                    latitude1
+            )
+
+        val deltaLon =
+            Math.toRadians(
+                longitude2 -
+                    longitude1
+            )
+
+        val a =
+            kotlin.math.sin(
+                deltaLat / 2
+            ) *
+                kotlin.math.sin(
+                    deltaLat / 2
+                ) +
+                kotlin.math.cos(lat1) *
+                kotlin.math.cos(lat2) *
+                kotlin.math.sin(
+                    deltaLon / 2
+                ) *
+                kotlin.math.sin(
+                    deltaLon / 2
+                )
+
+        val c =
+            2.0 *
+                kotlin.math.atan2(
+                    kotlin.math.sqrt(a),
+                    kotlin.math.sqrt(
+                        1.0 - a
+                    )
+                )
+
+        return earthRadius * c
+    }
+
+    // =====================================================
+    // DISTANCE ALERT
+    // =====================================================
+
+    private fun checkDistanceAlert() {
+
+        if (
+            !database
+                .isDistanceAlertEnabled()
+        ) {
+            return
+        }
+
+        if (
+            database
+                .isDistanceAlertFired()
+        ) {
+            return
+        }
+
+        val target =
+            database
+                .getDistanceAlertTarget()
+
+        if (target <= 0.0) {
+            return
+        }
+
+        val total =
+            database
+                .getTotalOdometer()
+
+        if (total >= target) {
+
+            database
+                .markDistanceAlertFired()
+
+            val manager =
+                getSystemService(
+                    NotificationManager::class.java
+                )
+
+            manager.notify(
+                2002,
+                NotificationCompat
+                    .Builder(
+                        this,
+                        CHANNEL_ID
+                    )
+                    .setContentTitle(
+                        "Odometer target reached"
+                    )
+                    .setContentText(
+                        "Odometer: %.2f km"
+                            .format(total)
+                    )
+                    .setSmallIcon(
+                        android.R.drawable
+                            .ic_dialog_info
+                    )
+                    .setAutoCancel(true)
+                    .build()
+            )
+        }
+    }
+
+    // =====================================================
+    // SPEED BROADCAST
+    // =====================================================
 
     private fun sendSpeedUpdate(
         speed: Double
@@ -502,6 +874,10 @@ class LocationTrackingService : Service() {
         )
     }
 
+    // =====================================================
+    // NOTIFICATION
+    // =====================================================
+
     private fun updateNotification(
         text: String
     ) {
@@ -517,14 +893,27 @@ class LocationTrackingService : Service() {
         )
     }
 
+    // =====================================================
+    // DESTROY
+    // =====================================================
+
     override fun onDestroy() {
 
         try {
 
             fusedClient
                 .removeLocationUpdates(
-                    callback
+                    locationCallback
                 )
+
+        } catch (_: Exception) {
+        }
+
+        try {
+
+            unregisterReceiver(
+                providerReceiver
+            )
 
         } catch (_: Exception) {
         }
@@ -537,6 +926,7 @@ class LocationTrackingService : Service() {
     override fun onBind(
         intent: Intent?
     ): IBinder? {
+
         return null
     }
 }
