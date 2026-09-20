@@ -31,13 +31,13 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.9
 
-      - name: Build V2 Debug APK
+      - name: Build V3 Debug APK
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload Debug APK
+      - name: Upload V3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: background-odometer-v2-debug
+          name: background-odometer-v3-debug
           path: app/build/outputs/apk/debug/app-debug.apk
