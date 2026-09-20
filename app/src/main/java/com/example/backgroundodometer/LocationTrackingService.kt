@@ -14,6 +14,7 @@ import android.os.IBinder
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -63,8 +64,7 @@ class LocationTrackingService : Service() {
     }
 
     private lateinit var fused:
-        com.google.android.gms.location
-            .FusedLocationProviderClient
+        FusedLocationProviderClient
 
     private lateinit var database:
         OdometerDatabaseHelper
@@ -92,8 +92,7 @@ class LocationTrackingService : Service() {
             ) {
 
                 for (
-                    location
-                    in result.locations
+                    location in result.locations
                 ) {
 
                     processLocation(
@@ -233,7 +232,9 @@ class LocationTrackingService : Service() {
                 LocationManager.GPS_PROVIDER
             )
 
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
 
             false
         }
@@ -300,7 +301,9 @@ class LocationTrackingService : Service() {
                 "GPS tracking active"
             )
 
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
 
             tracking = false
         }
@@ -314,7 +317,9 @@ class LocationTrackingService : Service() {
                 callback
             )
 
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
         }
 
         tracking = false
@@ -330,13 +335,15 @@ class LocationTrackingService : Service() {
 
             Thread {
 
-                finalizeTrip(id)
+                finalizeTrip(
+                    id
+                )
 
             }.start()
         }
 
         updateNotification(
-            "Tracking stopped"
+            "Matching route..."
         )
     }
 
@@ -350,7 +357,9 @@ class LocationTrackingService : Service() {
             database.getActiveTrip()
 
         if (active == null) {
+
             tripId = null
+
             return
         }
 
@@ -364,7 +373,9 @@ class LocationTrackingService : Service() {
                 active.id
             )
 
-        for (point in points) {
+        for (
+            point in points
+        ) {
 
             speeds.add(
                 point.speedKmh
@@ -376,13 +387,17 @@ class LocationTrackingService : Service() {
                 it.speedKmh
             } ?: 0.0
 
-        if (points.isNotEmpty()) {
+        if (
+            points.isNotEmpty()
+        ) {
 
             val point =
                 points.last()
 
             val location =
-                Location("database")
+                Location(
+                    "database"
+                )
 
             location.latitude =
                 point.latitude
@@ -398,8 +413,9 @@ class LocationTrackingService : Service() {
 
             location.speed =
                 (
-                    point.speedKmh / 3.6
-                ).toFloat()
+                    point.speedKmh /
+                        3.6
+                    ).toFloat()
 
             lastLocation =
                 location
@@ -436,7 +452,9 @@ class LocationTrackingService : Service() {
         val previous =
             lastLocation
 
-        if (previous != null) {
+        if (
+            previous != null
+        ) {
 
             val distance =
                 previous.distanceTo(
@@ -449,7 +467,9 @@ class LocationTrackingService : Service() {
                         previous.time
                     ) / 1000.0
 
-            if (seconds > 0) {
+            if (
+                seconds > 0
+            ) {
 
                 val implied =
                     (
@@ -470,11 +490,14 @@ class LocationTrackingService : Service() {
         }
 
         val speed =
-            if (location.hasSpeed()) {
+            if (
+                location.hasSpeed()
+            ) {
 
                 maxOf(
                     0.0,
-                    location.speed * 3.6
+                    location.speed *
+                        3.6
                 )
 
             } else {
@@ -482,7 +505,9 @@ class LocationTrackingService : Service() {
                 0.0
             }
 
-        if (tripId == null) {
+        if (
+            tripId == null
+        ) {
 
             tripId =
                 database.createTrip(
@@ -491,20 +516,33 @@ class LocationTrackingService : Service() {
 
             speeds.clear()
 
-            maximumSpeed = 0.0
+            maximumSpeed =
+                0.0
         }
 
         val id =
-            tripId ?: return
+            tripId
+                ?: return
 
         database.addTrackPoint(
-            tripId = id,
-            latitude = location.latitude,
-            longitude = location.longitude,
-            time = location.time,
-            speedKmh = speed,
+            tripId =
+                id,
+
+            latitude =
+                location.latitude,
+
+            longitude =
+                location.longitude,
+
+            time =
+                location.time,
+
+            speedKmh =
+                speed,
+
             accuracy =
-                location.accuracy.toDouble()
+                location.accuracy
+                    .toDouble()
         )
 
         speeds.add(
@@ -521,9 +559,14 @@ class LocationTrackingService : Service() {
         }
 
         val average =
-            if (speeds.isNotEmpty()) {
+            if (
+                speeds.isNotEmpty()
+            ) {
+
                 speeds.average()
+
             } else {
+
                 0.0
             }
 
@@ -535,21 +578,24 @@ class LocationTrackingService : Service() {
         )
 
         lastLocation =
-            Location(location)
+            Location(
+                location
+            )
 
         sendSpeedUpdate(
             speed
         )
 
         updateNotification(
-            "Speed %.1f km/h".format(
-                speed
-            )
+            "Speed %.1f km/h"
+                .format(
+                    speed
+                )
         )
     }
 
     // =====================================================
-    // FINALIZE
+    // FINALIZE V7
     // =====================================================
 
     private fun finalizeTrip(
@@ -563,13 +609,31 @@ class LocationTrackingService : Service() {
                     id
                 )
 
-            if (points.isEmpty()) {
+            if (
+                points.isEmpty()
+            ) {
 
-                database.completeTrip(
-                    id,
-                    0.0,
-                    null,
-                    System.currentTimeMillis()
+                database.completeTripWithDistances(
+                    tripId =
+                        id,
+
+                    gpsDistanceKm =
+                        0.0,
+
+                    roadDistanceKm =
+                        0.0,
+
+                    finalDistanceKm =
+                        0.0,
+
+                    distanceSource =
+                        "GPS",
+
+                    confidence =
+                        0.0,
+
+                    endTime =
+                        System.currentTimeMillis()
                 )
 
                 return
@@ -578,23 +642,172 @@ class LocationTrackingService : Service() {
             val threshold =
                 database.getSpeedThreshold()
 
-            val distance =
+            /*
+             * First calculate the old-style GPS
+             * distance. This is our guaranteed
+             * fallback.
+             */
+            val gpsDistance =
                 calculateDistance(
                     points,
                     threshold
                 )
 
-            val endTime =
-                points.last().time
-
-            database.completeTrip(
-                id,
-                distance,
-                null,
-                endTime
+            updateNotification(
+                "Matching GPS route..."
             )
 
-        } catch (_: Exception) {
+            /*
+             * Now perform V7 road matching.
+             */
+            val matched =
+                MapMatchingHelper.matchTrip(
+                    points,
+                    threshold
+                )
+
+            if (
+                matched != null &&
+                matched.distanceMeters > 0.0
+            ) {
+
+                val roadDistance =
+                    matched.distanceMeters /
+                        1000.0
+
+                /*
+                 * Cache the matched route so
+                 * opening the trip later does
+                 * not call OSRM again.
+                 */
+                MapMatchingHelper
+                    .saveCachedResult(
+                        applicationContext,
+                        id,
+                        matched
+                    )
+
+                database.completeTripWithDistances(
+                    tripId =
+                        id,
+
+                    gpsDistanceKm =
+                        gpsDistance,
+
+                    roadDistanceKm =
+                        roadDistance,
+
+                    finalDistanceKm =
+                        roadDistance,
+
+                    distanceSource =
+                        "ROAD",
+
+                    confidence =
+                        matched.confidence,
+
+                    endTime =
+                        points.last().time
+                )
+
+                updateNotification(
+                    "Trip saved • Road %.2f km"
+                        .format(
+                            roadDistance
+                        )
+                )
+
+            } else {
+
+                /*
+                 * OSRM failed.
+                 *
+                 * GPS distance remains
+                 * authoritative for this trip.
+                 */
+                database.completeTripWithDistances(
+                    tripId =
+                        id,
+
+                    gpsDistanceKm =
+                        gpsDistance,
+
+                    roadDistanceKm =
+                        0.0,
+
+                    finalDistanceKm =
+                        gpsDistance,
+
+                    distanceSource =
+                        "GPS",
+
+                    confidence =
+                        0.0,
+
+                    endTime =
+                        points.last().time
+                )
+
+                updateNotification(
+                    "Trip saved • GPS fallback"
+                )
+            }
+
+        } catch (
+            _: Exception
+        ) {
+
+            /*
+             * Never lose a trip because
+             * map matching failed.
+             */
+            try {
+
+                val points =
+                    database.getTrackPoints(
+                        id
+                    )
+
+                val threshold =
+                    database.getSpeedThreshold()
+
+                val gpsDistance =
+                    calculateDistance(
+                        points,
+                        threshold
+                    )
+
+                database.completeTripWithDistances(
+                    tripId =
+                        id,
+
+                    gpsDistanceKm =
+                        gpsDistance,
+
+                    roadDistanceKm =
+                        0.0,
+
+                    finalDistanceKm =
+                        gpsDistance,
+
+                    distanceSource =
+                        "GPS",
+
+                    confidence =
+                        0.0,
+
+                    endTime =
+                        points.lastOrNull()
+                            ?.time
+                            ?: System
+                                .currentTimeMillis()
+                )
+
+            } catch (
+                _: Exception
+            ) {
+                // Final safety fallback.
+            }
         }
     }
 
@@ -603,14 +816,19 @@ class LocationTrackingService : Service() {
         threshold: Double
     ): Double {
 
-        if (points.size < 2) {
+        if (
+            points.size < 2
+        ) {
+
             return 0.0
         }
 
         var total =
             0.0
 
-        for (i in 1 until points.size) {
+        for (
+            i in 1 until points.size
+        ) {
 
             val previous =
                 points[i - 1]
@@ -622,6 +840,7 @@ class LocationTrackingService : Service() {
                 current.speedKmh <
                 threshold
             ) {
+
                 continue
             }
 
@@ -638,11 +857,13 @@ class LocationTrackingService : Service() {
                 distance <= MAX_JUMP
             ) {
 
-                total += distance
+                total +=
+                    distance
             }
         }
 
-        return total / 1000.0
+        return total /
+            1000.0
     }
 
     private fun haversine(
@@ -728,7 +949,9 @@ class LocationTrackingService : Service() {
 
         manager.notify(
             NOTIFICATION_ID,
-            createNotification(text)
+            createNotification(
+                text
+            )
         )
     }
 
@@ -740,7 +963,9 @@ class LocationTrackingService : Service() {
                 callback
             )
 
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
         }
 
         database.close()
@@ -751,6 +976,7 @@ class LocationTrackingService : Service() {
     override fun onBind(
         intent: Intent?
     ): IBinder? {
+
         return null
     }
 }
