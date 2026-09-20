@@ -14,16 +14,13 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        versionCode = 4
-        versionName = "4.0"
+        versionCode = 5
+        versionName = "5.0"
     }
 
     compileOptions {
-        sourceCompatibility =
-            JavaVersion.VERSION_17
-
-        targetCompatibility =
-            JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
@@ -31,7 +28,6 @@ android {
     }
 
     signingConfigs {
-
         create("release") {
 
             val keystoreFile =
@@ -63,11 +59,9 @@ android {
     }
 
     buildTypes {
-
         release {
 
-            isMinifyEnabled =
-                false
+            isMinifyEnabled = false
 
             signingConfig =
                 signingConfigs.getByName(
