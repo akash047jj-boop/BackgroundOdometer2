@@ -22,7 +22,8 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
 
-    private lateinit var database: OdometerDatabaseHelper
+    private lateinit var database:
+        OdometerDatabaseHelper
 
     private lateinit var totalText: TextView
     private lateinit var todayText: TextView
@@ -33,7 +34,8 @@ class MainActivity : Activity() {
     private lateinit var lastTripText: TextView
     private lateinit var trackingButton: TextView
 
-    private var trackingActive = false
+    private var trackingActive =
+        false
 
     companion object {
 
@@ -54,17 +56,20 @@ class MainActivity : Activity() {
 
                 if (
                     intent?.action ==
-                    LocationTrackingService.ACTION_SPEED_UPDATE
+                    LocationTrackingService
+                        .ACTION_SPEED_UPDATE
                 ) {
 
                     val speed =
                         intent.getDoubleExtra(
-                            LocationTrackingService.EXTRA_SPEED,
+                            LocationTrackingService
+                                .EXTRA_SPEED,
                             0.0
                         )
 
                     speedText.text =
-                        "%.1f km/h".format(speed)
+                        "%.1f km/h"
+                            .format(speed)
 
                     refreshData()
                 }
@@ -86,10 +91,6 @@ class MainActivity : Activity() {
 
         refreshData()
     }
-
-    // =====================================================
-    // INTERFACE
-    // =====================================================
 
     private fun buildInterface() {
 
@@ -116,8 +117,6 @@ class MainActivity : Activity() {
             40
         )
 
-        // TITLE
-
         root.addView(
             createTitle(
                 "BACKGROUND ODOMETER"
@@ -126,8 +125,6 @@ class MainActivity : Activity() {
         )
 
         addSpace(root, 22)
-
-        // TOTAL
 
         root.addView(
             createLabel(
@@ -151,8 +148,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 24)
 
-        // TODAY
-
         root.addView(
             createLabel(
                 "TODAY",
@@ -175,8 +170,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 24)
 
-        // CURRENT SPEED
-
         root.addView(
             createLabel(
                 "CURRENT SPEED",
@@ -198,8 +191,6 @@ class MainActivity : Activity() {
         )
 
         addSpace(root, 18)
-
-        // AVERAGE / MAXIMUM
 
         val speedRow =
             LinearLayout(this)
@@ -245,8 +236,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 25)
 
-        // GPS STATUS
-
         statusText =
             TextView(this)
 
@@ -269,8 +258,6 @@ class MainActivity : Activity() {
         )
 
         addSpace(root, 18)
-
-        // START / STOP
 
         trackingButton =
             createAction(
@@ -296,14 +283,13 @@ class MainActivity : Activity() {
 
         addSpace(root, 10)
 
-        // REFRESH
-
         val refresh =
             createAction(
                 "REFRESH"
             )
 
         refresh.setOnClickListener {
+
             refreshData()
         }
 
@@ -313,8 +299,6 @@ class MainActivity : Activity() {
         )
 
         addSpace(root, 10)
-
-        // TRIPS
 
         val trips =
             createAction(
@@ -337,8 +321,6 @@ class MainActivity : Activity() {
         )
 
         addSpace(root, 25)
-
-        // LAST TRIP
 
         root.addView(
             createLabel(
@@ -365,8 +347,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 25)
 
-        // THRESHOLD
-
         root.addView(
             createLabel(
                 "ODOMETER SPEED THRESHOLD",
@@ -391,8 +371,6 @@ class MainActivity : Activity() {
 
         addSpace(root, 35)
 
-        // FOOTER
-
         root.addView(
             createLabel(
                 "App by Potato's man",
@@ -411,10 +389,6 @@ class MainActivity : Activity() {
 
         setContentView(scroll)
     }
-
-    // =====================================================
-    // TRACKING
-    // =====================================================
 
     private fun startTracking() {
 
@@ -505,10 +479,6 @@ class MainActivity : Activity() {
         refreshData()
     }
 
-    // =====================================================
-    // DATA
-    // =====================================================
-
     private fun refreshData() {
 
         totalText.text =
@@ -554,17 +524,14 @@ class MainActivity : Activity() {
         }
     }
 
-    // =====================================================
-    // PERMISSIONS
-    // =====================================================
-
     private fun requestLocationPermission() {
 
         if (
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
+            ) !=
+            PackageManager.PERMISSION_GRANTED
         ) {
 
             ActivityCompat.requestPermissions(
@@ -587,10 +554,6 @@ class MainActivity : Activity() {
         ) ==
             PackageManager.PERMISSION_GRANTED
     }
-
-    // =====================================================
-    // UI
-    // =====================================================
 
     private fun createTitle(
         text: String
@@ -710,7 +673,8 @@ class MainActivity : Activity() {
                 value
             )
 
-        valueView.textSize = 20f
+        valueView.textSize =
+            20f
 
         column.addView(
             valueView,
@@ -775,10 +739,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // =====================================================
-    // LAYOUT HELPERS
-    // =====================================================
-
     private fun wrapParams():
         LinearLayout.LayoutParams {
 
@@ -822,10 +782,6 @@ class MainActivity : Activity() {
         )
     }
 
-    // =====================================================
-    // LIFECYCLE
-    // =====================================================
-
     override fun onResume() {
 
         super.onResume()
@@ -834,7 +790,8 @@ class MainActivity : Activity() {
             this,
             speedReceiver,
             IntentFilter(
-                LocationTrackingService.ACTION_SPEED_UPDATE
+                LocationTrackingService
+                    .ACTION_SPEED_UPDATE
             ),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
@@ -845,9 +802,11 @@ class MainActivity : Activity() {
     override fun onPause() {
 
         try {
+
             unregisterReceiver(
                 speedReceiver
             )
+
         } catch (_: Exception) {
         }
 
