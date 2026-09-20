@@ -1,119 +1,69 @@
 package com.example.backgroundodometer
 
-import android.app.Activity
-import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.util.Locale
 
-class RouteMapActivity : Activity() {
+class RouteMapActivity : AppCompatActivity() {
 
-    private lateinit var database:
-        OdometerDatabaseHelper
+    private lateinit var map: MapView
+    private lateinit var database: OdometerDatabaseHelper
 
-    private lateinit var map:
-        MapView
+    private var tripId: Long = -1L
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         Configuration.getInstance()
-            .userAgentValue =
-            packageName
-
-        database =
-            OdometerDatabaseHelper(this)
-
-        val tripId =
-            intent.getLongExtra(
-                "trip_id",
-                -1
+            .load(
+                applicationContext,
+                getSharedPreferences(
+                    "osmdroid",
+                    MODE_PRIVATE
+                )
             )
 
-        if (tripId <= 0) {
+        Configuration.getInstance().userAgentValue =
+            packageName
+
+        tripId =
+            intent.getLongExtra(
+                "trip_id",
+                -1L
+            )
+
+        if (tripId <= 0L) {
+            Toast.makeText(
+                this,
+                "Invalid trip",
+                Toast.LENGTH_LONG
+            ).show()
 
             finish()
-
             return
         }
 
-        buildInterface(
-            tripId
-        )
+        buildScreen()
+        loadRoute()
     }
 
-    private fun buildInterface(
-        tripId: Long
-    ) {
+    private fun buildScreen() {
 
         val root =
-            LinearLayout(this)
+            android.widget.LinearLayout(this)
 
         root.orientation =
-            LinearLayout.VERTICAL
+            android.widget.LinearLayout.VERTICAL
 
         root.setBackgroundColor(
-            Color.BLACK
-        )
-
-        val header =
-            LinearLayout(this)
-
-        header.orientation =
-            LinearLayout.HORIZONTAL
-
-        header.setPadding(
-            15,
-            15,
-            15,
-            15
-        )
-
-        header.setBackgroundColor(
-            Color.rgb(
-                15,
-                15,
-                15
-            )
-        )
-
-        val back =
-            TextView(this)
-
-        back.text =
-            "‹ BACK"
-
-        back.textSize =
-            17f
-
-        back.setTextColor(
-            Color.WHITE
-        )
-
-        back.gravity =
-            Gravity.CENTER_VERTICAL
-
-        back.setOnClickListener {
-            finish()
-        }
-
-        header.addView(
-            back,
-            LinearLayout.LayoutParams(
-                90,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+            android.graphics.Color.BLACK
         )
 
         val title =
@@ -122,72 +72,72 @@ class RouteMapActivity : Activity() {
         title.text =
             "TRIP ROUTE"
 
-        title.textSize =
-            21f
+        title.textSize = 20f
 
         title.setTextColor(
-            Color.WHITE
+            android.graphics.Color.WHITE
         )
 
-        title.gravity =
-            Gravity.CENTER
-
-        header.addView(
-            title,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                1f
-            )
-        )
-
-        val spacer =
-            View(this)
-
-        header.addView(
-            spacer,
-            LinearLayout.LayoutParams(
-                90,
-                1
-            )
+        title.setPadding(
+            20,
+            20,
+            20,
+            20
         )
 
         root.addView(
-            header,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                65
+            title,
+            android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
-        map =
-            MapView(this)
-
-        map.setMultiTouchControls(
-            true
-        )
-
-        map.setBuiltInZoomControls(
-            false
-        )
+        map = MapView(this)
 
         map.setTileSource(
-            org.osmdroid.tileprovider.tilesource
-                .TileSourceFactory.MAPNIK
+            TileSourceFactory.MAPNIK
         )
+
+        map.setMultiTouchControls(true)
+
+        map.setBuiltInZoomControls(true)
 
         root.addView(
             map,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
         )
 
-        val trip =
-            database.getTrip(
-                tripId
+        val backButton =
+            android.widget.Button(this)
+
+        backButton.text =
+            "BACK"
+
+        backButton.setOnClickListener {
+            finish()
+        }
+
+        root.addView(
+            backButton,
+            android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        setContentView(root)
+    }
+
+    private fun loadRoute() {
+
+        database =
+            OdometerDatabaseHelper(
+                applicationContext
             )
 
         val points =
@@ -195,31 +145,19 @@ class RouteMapActivity : Activity() {
                 tripId
             )
 
-        if (
-            trip != null &&
-            points.isNotEmpty()
-        ) {
+        if (points.isEmpty()) {
 
-            drawRoute(
-                trip,
-                points
-            )
+            Toast.makeText(
+                this,
+                "No GPS route recorded for this trip",
+                Toast.LENGTH_LONG
+            ).show()
 
-        } else {
-
-            showNoRoute()
+            return
         }
 
-        setContentView(root)
-    }
-
-    private fun drawRoute(
-        trip: TripSummary,
-        points: List<TrackPoint>
-    ) {
-
         val geoPoints =
-            mutableListOf<GeoPoint>()
+            ArrayList<GeoPoint>()
 
         for (point in points) {
 
@@ -235,121 +173,158 @@ class RouteMapActivity : Activity() {
             return
         }
 
+        /*
+         * Draw the recorded GPS route.
+         *
+         * IMPORTANT:
+         * Use Polyline() instead of Polyline(this).
+         *
+         * This avoids the constructor mismatch with
+         * the osmdroid version used by this project.
+         */
         val route =
-            Polyline(mapView)
+            Polyline()
 
         route.setPoints(
             geoPoints
         )
 
-        route.width =
+        route.outlinePaint.strokeWidth =
             8f
 
-        route.color =
-            Color.rgb(
-                0,
-                188,
-                212
-            )
+        route.outlinePaint.isAntiAlias =
+            true
 
         map.overlays.add(
             route
         )
 
-        // START MARKER
-
-        val start =
-            Marker(map)
-
-        start.position =
-            geoPoints.first()
-
-        start.title =
-            "Trip start"
-
-        start.snippet =
-            "Start of recorded route"
-
-        start.setAnchor(
-            Marker.ANCHOR_CENTER,
-            Marker.ANCHOR_BOTTOM
-        )
-
-        map.overlays.add(
-            start
-        )
-
-        // END MARKER
-
-        if (geoPoints.size > 1) {
-
-            val end =
-                Marker(map)
-
-            end.position =
-                geoPoints.last()
-
-            end.title =
-                "Trip end"
-
-            end.snippet =
-                "%.2f km".format(
-                    trip.distanceKm
-                )
-
-            end.setAnchor(
-                Marker.ANCHOR_CENTER,
-                Marker.ANCHOR_BOTTOM
-            )
-
-            map.overlays.add(
-                end
-            )
-        }
-
-        val first =
-            geoPoints.first()
-
-        map.controller.setCenter(
-            first
-        )
-
-        map.controller.setZoom(
-            15.0
-        )
-
         map.invalidate()
+
+        showRouteOnScreen(
+            geoPoints
+        )
     }
 
-    private fun showNoRoute() {
+    private fun showRouteOnScreen(
+        points: List<GeoPoint>
+    ) {
 
-        val message =
-            TextView(this)
+        if (points.isEmpty()) {
+            return
+        }
 
-        message.text =
-            "No GPS route points available."
+        /*
+         * Calculate the route bounds manually.
+         * This avoids depending on different
+         * BoundingBox helper APIs between osmdroid
+         * versions.
+         */
 
-        message.textSize =
-            18f
+        var minLat =
+            points[0].latitude
 
-        message.setTextColor(
-            Color.WHITE
+        var maxLat =
+            points[0].latitude
+
+        var minLon =
+            points[0].longitude
+
+        var maxLon =
+            points[0].longitude
+
+        for (point in points) {
+
+            if (point.latitude < minLat) {
+                minLat =
+                    point.latitude
+            }
+
+            if (point.latitude > maxLat) {
+                maxLat =
+                    point.latitude
+            }
+
+            if (point.longitude < minLon) {
+                minLon =
+                    point.longitude
+            }
+
+            if (point.longitude > maxLon) {
+                maxLon =
+                    point.longitude
+            }
+        }
+
+        val centerLat =
+            (minLat + maxLat) / 2.0
+
+        val centerLon =
+            (minLon + maxLon) / 2.0
+
+        map.controller.setCenter(
+            GeoPoint(
+                centerLat,
+                centerLon
+            )
         )
 
-        message.gravity =
-            Gravity.CENTER
+        /*
+         * Choose a reasonable zoom.
+         */
 
-        message.setBackgroundColor(
-            Color.BLACK
-        )
+        val latSpan =
+            maxLat - minLat
 
-        setContentView(
-            message
+        val lonSpan =
+            maxLon - minLon
+
+        val largestSpan =
+            maxOf(
+                latSpan,
+                lonSpan
+            )
+
+        val zoom =
+            when {
+
+                largestSpan > 1.0 ->
+                    8.0
+
+                largestSpan > 0.5 ->
+                    9.0
+
+                largestSpan > 0.2 ->
+                    10.0
+
+                largestSpan > 0.1 ->
+                    11.0
+
+                largestSpan > 0.05 ->
+                    12.0
+
+                largestSpan > 0.02 ->
+                    13.0
+
+                largestSpan > 0.01 ->
+                    14.0
+
+                largestSpan > 0.005 ->
+                    15.0
+
+                largestSpan > 0.002 ->
+                    16.0
+
+                else ->
+                    17.0
+            }
+
+        map.controller.setZoom(
+            zoom
         )
     }
 
     override fun onResume() {
-
         super.onResume()
 
         if (::map.isInitialized) {
@@ -368,7 +343,9 @@ class RouteMapActivity : Activity() {
 
     override fun onDestroy() {
 
-        database.close()
+        if (::map.isInitialized) {
+            map.onDetach()
+        }
 
         super.onDestroy()
     }
