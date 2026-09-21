@@ -187,7 +187,12 @@ class MainActivity : Activity() {
         fuelCard.addView(belowReserveButton, wrapParams())
         belowReserveButton.setOnClickListener {
             if (database.hasCurrentBelowReserveMarker()) {
-                Toast.makeText(this, "Below-reserve point is already saved.", Toast.LENGTH_SHORT).show()
+                if (database.removeCurrentBelowReserveMarker()) {
+                    Toast.makeText(this, "Below-reserve marker removed. You can mark it again later.", Toast.LENGTH_SHORT).show()
+                    refreshData()
+                } else {
+                    Toast.makeText(this, "Unable to remove below-reserve marker.", Toast.LENGTH_SHORT).show()
+                }
                 return@setOnClickListener
             }
             val autoDetected = database.isReserveReachedByCalculation()
@@ -242,7 +247,7 @@ class MainActivity : Activity() {
         addDrawerItem(drawer, "SETTINGS") { openActivity(SettingsActivity::class.java) }
         addDrawerItem(drawer, "EXPORT") { openActivity(ExportActivity::class.java) }
         addSpace(drawer, 25)
-        drawer.addView(createLabel("Background Odometer V16", "#777777"), wrapParams())
+        drawer.addView(createLabel("Background Odometer V19", "#777777"), wrapParams())
         return drawer
     }
 
@@ -822,8 +827,8 @@ class MainActivity : Activity() {
         belowReserveButton.visibility = View.VISIBLE
         when {
             database.hasCurrentBelowReserveMarker() -> {
-                belowReserveButton.text = "BELOW RESERVE ✓ • MILEAGE POINT SAVED"
-                belowReserveButton.isEnabled = false
+                belowReserveButton.text = "BELOW RESERVE ✓ • TAP TO UNMARK"
+                belowReserveButton.isEnabled = true
             }
             autoBelow -> {
                 belowReserveButton.text = "BELOW RESERVE — AUTO-DETECTED • TAP TO CONFIRM"
@@ -834,7 +839,7 @@ class MainActivity : Activity() {
                 belowReserveButton.isEnabled = true
             }
         }
-        belowReserveButton.alpha = if (belowReserveButton.isEnabled) 1f else 0.7f
+        belowReserveButton.alpha = 1f
     }
 
     private fun showBackgroundLocationHintOnce() {
