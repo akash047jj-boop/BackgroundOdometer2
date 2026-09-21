@@ -1728,33 +1728,21 @@ class OdometerDatabaseHelper(
      * distance travelled between refuels / litres added at the later refuel.
      * It is intentionally labelled ESTIMATED in the UI.
      */
+    /**
+     * Estimated mileage is the simple running estimate requested by the rider:
+     * total displayed odometer distance divided by total fuel entered.
+     * Below-reserve marker records have zero litres and therefore do not affect it.
+     */
     fun getEstimatedMileage(): Double {
-        val records =
+        val totalFuelEntered =
             getFuelRecords()
-                .sortedBy { it.time }
                 .filter { it.litresAdded > 0.0 }
+                .sumOf { it.litresAdded }
 
-        if (records.size < 2) {
-            return 0.0
-        }
+        val totalDistance = getTotalOdometer()
 
-        var totalDistance = 0.0
-        var totalFuel = 0.0
-
-        for (i in 1 until records.size) {
-            val previous = records[i - 1]
-            val current = records[i]
-            val distance = current.odometerKm - previous.odometerKm
-            val fuelAdded = current.litresAdded
-
-            if (distance > 0.5 && fuelAdded > 0.1) {
-                totalDistance += distance
-                totalFuel += fuelAdded
-            }
-        }
-
-        return if (totalFuel > 0.0) {
-            totalDistance / totalFuel
+        return if (totalFuelEntered > 0.0 && totalDistance > 0.0) {
+            totalDistance / totalFuelEntered
         } else {
             0.0
         }
@@ -1797,7 +1785,26 @@ class OdometerDatabaseHelper(
 
     fun hasCurrentBelowReserveMarker(): Boolean {
         val latest = getFuelRecords().firstOrNull() ?: return false
-        return latest.fuelStatus.equals("BELOW", true)
+        return latest.litresAdded <= 0.0 &&
+            latest.fuelStatus.equals("BELOW", true)
+    }
+
+    /** Removes only the latest rider-created below-reserve marker. */
+    fun removeCurrentBelowReserveMarker(): Boolean {
+        val latest = getFuelRecords().firstOrNull() ?: return false
+        if (latest.litresAdded > 0.0 || !latest.fuelStatus.equals("BELOW", true)) {
+            return false
+        }
+        val deleted = writableDatabase.delete(
+            TABLE_FUEL,
+            "id = ?",
+            arrayOf(latest.id.toString())
+        ) > 0
+        if (deleted) {
+            rebuildFuelHistory()
+            recalculateLatestReserveCrossed()
+        }
+        return deleted
     }
 
     /**
