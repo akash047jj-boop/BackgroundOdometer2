@@ -1841,6 +1841,93 @@ class OdometerDatabaseHelper(
         return 0.0
     }
 
+    fun updateTripAssignment(
+        tripId: Long,
+        date: String,
+        place: String
+    ): Boolean {
+        val values = ContentValues().apply {
+            put("assigned_date", date)
+            put("assigned_place", place)
+        }
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "id = ? AND completed = 1",
+            arrayOf(tripId.toString())
+        ) > 0
+    }
+
+    fun updateManualTrip(
+        tripId: Long,
+        date: String,
+        place: String,
+        distanceKm: Double,
+        startTime: Long,
+        endTime: Long
+    ): Boolean {
+        val existing = getTrip(tripId) ?: return false
+        if (existing.distanceSource != "MANUAL") return false
+
+        val parsedDate = try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)?.time ?: existing.startTime
+        } catch (_: Exception) {
+            existing.startTime
+        }
+
+        val finalStart = if (startTime > 0L) startTime else parsedDate
+        val finalEnd = if (endTime > 0L) endTime else 0L
+
+        val values = ContentValues().apply {
+            put("start_time", finalStart)
+            put("end_time", finalEnd)
+            put("distance_km", distanceKm.coerceAtLeast(0.0))
+            put("assigned_date", date)
+            put("assigned_place", place)
+            put("gps_distance_km", 0.0)
+            put("road_distance_km", 0.0)
+            put("distance_source", "MANUAL")
+            put("matching_confidence", 1.0)
+        }
+
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "id = ? AND completed = 1",
+            arrayOf(tripId.toString())
+        ) > 0
+    }
+
+    fun updateDayRecord(
+        oldDate: String,
+        newDate: String,
+        place: String
+    ): Int {
+        val values = ContentValues().apply {
+            put("assigned_date", newDate)
+            put("assigned_place", place)
+        }
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "completed = 1 AND assigned_date = ?",
+            arrayOf(oldDate)
+        )
+    }
+
+    fun deleteDayRecord(date: String): Int {
+        val values = ContentValues().apply {
+            put("assigned_date", "")
+            put("assigned_place", "")
+        }
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "completed = 1 AND assigned_date = ?",
+            arrayOf(date)
+        )
+    }
+
     fun deleteTrip(tripId: Long): Boolean {
         val db = writableDatabase
         db.beginTransaction()
