@@ -27,654 +27,204 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : Activity() {
 
     private lateinit var database: OdometerDatabaseHelper
-
     private lateinit var totalText: TextView
     private lateinit var todayText: TextView
     private lateinit var speedText: TextView
     private lateinit var averageText: TextView
     private lateinit var maxText: TextView
     private lateinit var statusText: TextView
-    private lateinit var lastTripText: TextView
-
     private lateinit var fuelText: TextView
-    private lateinit var mileageText: TextView
     private lateinit var rangeText: TextView
-    private lateinit var reserveRangeText: TextView
-    private lateinit var reserveReachedButton: TextView
-    private lateinit var reserveCrossedButton: TextView
-
+    private lateinit var reserveStatusText: TextView
     private lateinit var trackingButton: TextView
+    private lateinit var drawerLayout: DrawerLayout
 
     private var trackingActive = false
 
     private val preferences by lazy {
-        getSharedPreferences(
-            "background_odometer",
-            MODE_PRIVATE
-        )
+        getSharedPreferences("background_odometer", MODE_PRIVATE)
     }
 
     companion object {
-
         private const val TIFFANY = "#00BCD4"
         private const val DARK = "#151515"
-
         private const val REQUEST_LOCATION = 100
         private const val REQUEST_NOTIFICATIONS = 101
-
-        private const val PREF_AUTO_TRACKING =
-            "auto_tracking_enabled"
-
-        private const val PREF_BACKGROUND_HINT =
-            "background_location_hint_shown"
+        private const val PREF_AUTO_TRACKING = "auto_tracking_enabled"
+        private const val PREF_BACKGROUND_HINT = "background_location_hint_shown"
     }
 
-    private val serviceReceiver =
-        object : BroadcastReceiver() {
-
-            override fun onReceive(
-                context: Context?,
-                intent: Intent?
-            ) {
-
-                if (
-                    intent?.action ==
-                    LocationTrackingService.ACTION_SPEED_UPDATE
-                ) {
-
-                    val speed =
-                        intent.getDoubleExtra(
-                            LocationTrackingService.EXTRA_SPEED,
-                            0.0
-                        )
-
-                    speedText.text =
-                        "%.1f km/h".format(speed)
-
-                    refreshData()
-
-                    return
-                }
-
-                if (
-                    intent?.action ==
-                    LocationTrackingService.ACTION_STATUS_UPDATE
-                ) {
-
-                    val status =
-                        intent.getStringExtra(
-                            LocationTrackingService.EXTRA_STATUS
-                        ) ?: return
-
-                    updateStatus(status)
-
-                    val speed =
-                        intent.getDoubleExtra(
-                            LocationTrackingService.EXTRA_SPEED,
-                            0.0
-                        )
-
-                    speedText.text =
-                        "%.1f km/h".format(speed)
-
+    private val serviceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                LocationTrackingService.ACTION_SPEED_UPDATE,
+                LocationTrackingService.ACTION_STATUS_UPDATE -> {
+                    val speed = intent.getDoubleExtra(LocationTrackingService.EXTRA_SPEED, 0.0)
+                    speedText.text = "%.1f km/h".format(speed)
+                    intent.getStringExtra(LocationTrackingService.EXTRA_STATUS)?.let { updateStatus(it) }
                     refreshData()
                 }
             }
         }
+    }
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        database =
-            OdometerDatabaseHelper(this)
-
+        database = OdometerDatabaseHelper(this)
         buildInterface()
-
         requestLocationPermission()
-
         refreshData()
     }
 
     private fun buildInterface() {
+        drawerLayout = DrawerLayout(this)
+        drawerLayout.setBackgroundColor(Color.BLACK)
 
-        val scroll =
-            ScrollView(this)
-
+        val scroll = ScrollView(this)
         scroll.setBackgroundColor(Color.BLACK)
 
-        val root =
-            LinearLayout(this)
-
-        root.orientation =
-            LinearLayout.VERTICAL
-
-        root.gravity =
-            Gravity.CENTER_HORIZONTAL
-
-        root.setPadding(
-            20,
-            40,
-            20,
-            40
-        )
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.CENTER_HORIZONTAL
+        root.setPadding(20, 28, 20, 30)
 
         val topBar = LinearLayout(this)
         topBar.orientation = LinearLayout.HORIZONTAL
         topBar.gravity = Gravity.CENTER_VERTICAL
 
-        val menuButton = createMenuButton("☰")
-
-        topBar.addView(
-            menuButton,
-            LinearLayout.LayoutParams(58, 58)
-        )
+        val menu = createMenuButton("☰")
+        topBar.addView(menu, LinearLayout.LayoutParams(58, 58))
 
         val title = createTitle("BACKGROUND ODOMETER")
-        topBar.addView(
-            title,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
+        topBar.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        val spacer = View(this)
-        topBar.addView(
-            spacer,
-            LinearLayout.LayoutParams(58, 58)
-        )
-
-        root.addView(
-            topBar,
-            wrapParams()
-        )
-
-        addSpace(root, 22)
-
-        root.addView(
-            createLabel(
-                "TOTAL ODOMETER",
-                TIFFANY
-            ),
-            wrapParams()
-        )
-
-        totalText =
-            createLargeValue("0.00 km")
-
-        root.addView(
-            totalText,
-            wrapParams()
-        )
-
+        topBar.addView(View(this), LinearLayout.LayoutParams(58, 58))
+        root.addView(topBar, wrapParams())
         addSpace(root, 20)
 
-        root.addView(
-            createLabel(
-                "TODAY",
-                "#888888"
-            ),
-            wrapParams()
-        )
+        root.addView(createLabel("TOTAL ODOMETER", TIFFANY), wrapParams())
+        totalText = createLargeValue("0.00 km")
+        root.addView(totalText, wrapParams())
 
-        todayText =
-            createMediumValue("0.00 km")
+        addSpace(root, 14)
+        root.addView(createLabel("TODAY", "#888888"), wrapParams())
+        todayText = createMediumValue("0.00 km")
+        root.addView(todayText, wrapParams())
 
-        root.addView(
-            todayText,
-            wrapParams()
-        )
-
-        addSpace(root, 20)
-
-        root.addView(
-            createLabel(
-                "CURRENT SPEED",
-                "#888888"
-            ),
-            wrapParams()
-        )
-
-        speedText =
-            createMediumValue("0.0 km/h")
-
-        root.addView(
-            speedText,
-            wrapParams()
-        )
-
-        addSpace(root, 15)
-
-        val speedRow =
-            LinearLayout(this)
-
-        speedRow.orientation =
-            LinearLayout.HORIZONTAL
-
-        speedRow.gravity =
-            Gravity.CENTER
-
-        val average =
-            createStatColumn(
-                "AVERAGE",
-                "0.0 km/h"
-            )
-
-        averageText =
-            average.second
-
-        val maximum =
-            createStatColumn(
-                "MAXIMUM",
-                "0.0 km/h"
-            )
-
-        maxText =
-            maximum.second
-
-        speedRow.addView(
-            average.first,
-            halfParams()
-        )
-
-        speedRow.addView(
-            maximum.first,
-            halfParams()
-        )
-
-        root.addView(
-            speedRow,
-            wrapParams()
-        )
-
-        addSpace(root, 22)
-
-        statusText =
-            TextView(this)
-
-        statusText.text =
-            "GPS STATUS\nREADY"
-
-        statusText.textSize = 16f
-        statusText.setTextColor(Color.LTGRAY)
-        statusText.gravity = Gravity.CENTER
-
-        root.addView(
-            statusText,
-            wrapParams()
-        )
-
-        addSpace(root, 15)
-
-        trackingButton =
-            createAction("START TRACKING")
-
-        trackingButton.setOnClickListener {
-
-            if (trackingActive) {
-                stopTracking()
-            } else {
-                startTracking()
-            }
-        }
-
-        root.addView(
-            trackingButton,
-            fullParams(62)
-        )
-
-        addSpace(root, 10)
-
-        val refresh =
-            createAction("REFRESH")
-
-        refresh.setOnClickListener {
-            refreshData()
-        }
-
-        root.addView(
-            refresh,
-            fullParams(58)
-        )
-
-        addSpace(root, 10)
-
-        val trips =
-            createAction("TRIPS")
-
-        trips.setOnClickListener {
-
-            startActivity(
-                Intent(
-                    this,
-                    TripsActivity::class.java
-                )
-            )
-        }
-
-        root.addView(
-            trips,
-            fullParams(58)
-        )
-
-        addSpace(root, 10)
-
-        val days =
-            createAction("DAYS")
-
-        days.setOnClickListener {
-
-            startActivity(
-                Intent(
-                    this,
-                    DaysActivity::class.java
-                )
-            )
-        }
-
-        root.addView(
-            days,
-            fullParams(58)
-        )
-
-        addSpace(root, 25)
-
-        root.addView(
-            createLabel(
-                "FUEL",
-                TIFFANY
-            ),
-            wrapParams()
-        )
-
-        addSpace(root, 5)
-
-        fuelText =
-            createMediumValue("0.00 L")
-
-        root.addView(
-            fuelText,
-            wrapParams()
-        )
-
-        addSpace(root, 5)
-
-        mileageText =
-            createLabel(
-                "Mileage: --",
-                "#AAAAAA"
-            )
-
-        root.addView(
-            mileageText,
-            wrapParams()
-        )
-
-        addSpace(root, 5)
-
-        rangeText =
-            createLabel(
-                "Overall range: --",
-                "#AAAAAA"
-            )
-
-        root.addView(
-            rangeText,
-            wrapParams()
-        )
-
-        addSpace(root, 3)
-
-        reserveRangeText =
-            createLabel(
-                "Range until reserve: --",
-                "#AAAAAA"
-            )
-
-        root.addView(
-            reserveRangeText,
-            wrapParams()
-        )
-
-        addSpace(root, 12)
-
-        reserveReachedButton =
-            createStatusButton(
-                "RESERVE REACHED",
-                false
-            )
-
-        root.addView(
-            reserveReachedButton,
-            fullParams(54)
-        )
+        addSpace(root, 14)
+        root.addView(createLabel("CURRENT SPEED", "#888888"), wrapParams())
+        speedText = createMediumValue("0.0 km/h")
+        root.addView(speedText, wrapParams())
 
         addSpace(root, 8)
+        val speedRow = LinearLayout(this)
+        speedRow.orientation = LinearLayout.HORIZONTAL
+        speedRow.gravity = Gravity.CENTER
+        val avg = createStatColumn("AVERAGE", "0.0 km/h")
+        averageText = avg.second
+        val max = createStatColumn("MAXIMUM", "0.0 km/h")
+        maxText = max.second
+        speedRow.addView(avg.first, halfParams())
+        speedRow.addView(max.first, halfParams())
+        root.addView(speedRow, wrapParams())
 
-        reserveCrossedButton =
-            createStatusButton(
-                "RESERVE CROSSED",
-                false
-            )
+        addSpace(root, 16)
+        statusText = TextView(this).apply {
+            text = "GPS STATUS\nREADY"
+            textSize = 15f
+            setTextColor(Color.LTGRAY)
+            gravity = Gravity.CENTER
+        }
+        root.addView(statusText, wrapParams())
 
-        root.addView(
-            reserveCrossedButton,
-            fullParams(54)
-        )
+        addSpace(root, 12)
+        trackingButton = createAction("START TRACKING")
+        trackingButton.setOnClickListener {
+            if (trackingActive) stopTracking() else startTracking()
+        }
+        root.addView(trackingButton, buttonParams())
 
         addSpace(root, 10)
+        val fuelCard = LinearLayout(this)
+        fuelCard.orientation = LinearLayout.VERTICAL
+        fuelCard.setPadding(16, 14, 16, 14)
+        fuelCard.background = cardBackground()
+        fuelCard.addView(createLabel("FUEL", TIFFANY), wrapParams())
+        fuelText = createMediumValue("0.00 L")
+        fuelText.textSize = 22f
+        fuelCard.addView(fuelText, wrapParams())
+        rangeText = createLabel("Range: --", "#AAAAAA")
+        fuelCard.addView(rangeText, wrapParams())
+        reserveStatusText = createStatusText("ABOVE RESERVE", false)
+        fuelCard.addView(reserveStatusText, wrapParams())
+        root.addView(fuelCard, wrapParams())
 
-        val fuel =
-            createAction("FUEL")
+        addSpace(root, 12)
+        val refresh = createAction("REFRESH")
+        refresh.setOnClickListener { refreshData() }
+        root.addView(refresh, buttonParams())
 
-        fuel.setOnClickListener {
-            showFuelMenu()
-        }
-
-        root.addView(
-            fuel,
-            fullParams(58)
-        )
-
+        addSpace(root, 24)
+        root.addView(createLabel("Use ☰ for Trips, Days, Fuel, Settings and Export", "#777777"), wrapParams())
         addSpace(root, 10)
+        root.addView(createLabel("App by Potato's man", "#666666"), wrapParams())
 
-        val history =
-            createAction("FUEL HISTORY")
+        scroll.addView(root, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        drawerLayout.addView(scroll, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
 
-        history.setOnClickListener {
-            showFuelHistory()
-        }
-
-        root.addView(
-            history,
-            fullParams(58)
-        )
-
-        addSpace(root, 25)
-
-        root.addView(
-            createLabel(
-                "LAST COMPLETED TRIP",
-                "#888888"
-            ),
-            wrapParams()
-        )
-
-        lastTripText =
-            createMediumValue("No trips yet")
-
-        lastTripText.textSize = 20f
-
-        root.addView(
-            lastTripText,
-            wrapParams()
-        )
-
-        addSpace(root, 25)
-
-        root.addView(
-            createLabel(
-                "ODOMETER SPEED THRESHOLD",
-                "#888888"
-            ),
-            wrapParams()
-        )
-
-        val threshold =
-            createMediumValue(
-                "%.1f km/h".format(
-                    database.getSpeedThreshold()
-                )
-            )
-
-        root.addView(
-            threshold,
-            wrapParams()
-        )
-
-        addSpace(root, 35)
-
-        root.addView(
-            createLabel(
-                "App by Potato's man",
-                "#777777"
-            ),
-            wrapParams()
-        )
-
-        scroll.addView(
-            root,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        val drawerLayout = DrawerLayout(this)
-        drawerLayout.setBackgroundColor(Color.BLACK)
-        drawerLayout.id = android.R.id.content
-
-        val contentParams = DrawerLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-        drawerLayout.addView(scroll, contentParams)
-
-        val drawer = buildNavigationDrawer(drawerLayout)
-        val drawerParams = DrawerLayout.LayoutParams(
-            (310 * resources.displayMetrics.density).toInt(),
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
+        val drawer = buildNavigationDrawer()
+        val drawerParams = DrawerLayout.LayoutParams(dp(310), ViewGroup.LayoutParams.MATCH_PARENT)
         drawerParams.gravity = Gravity.START
         drawerLayout.addView(drawer, drawerParams)
 
-        menuButton.setOnClickListener {
-            drawerLayout.openDrawer(Gravity.START)
-        }
-
+        menu.setOnClickListener { drawerLayout.openDrawer(Gravity.START) }
         setContentView(drawerLayout)
     }
 
-    private fun buildNavigationDrawer(
-        drawerLayout: DrawerLayout
-    ): LinearLayout {
-
+    private fun buildNavigationDrawer(): LinearLayout {
         val drawer = LinearLayout(this)
         drawer.orientation = LinearLayout.VERTICAL
-        drawer.setPadding(28, 55, 28, 30)
+        drawer.setPadding(22, 35, 22, 24)
         drawer.setBackgroundColor(Color.rgb(10, 10, 10))
 
-        val title = createTitle("MENU")
-        drawer.addView(title, wrapParams())
+        drawer.addView(createTitle("MENU"), wrapParams())
+        addSpace(drawer, 20)
+        addDrawerItem(drawer, "HOME") { drawerLayout.closeDrawer(Gravity.START) }
+        addDrawerItem(drawer, "TRIPS") { openActivity(TripsActivity::class.java) }
+        addDrawerItem(drawer, "DAYS") { openActivity(DaysActivity::class.java) }
+        addDrawerItem(drawer, "FUEL") { showFuelMenu() }
+        addDrawerItem(drawer, "SETTINGS") { openActivity(SettingsActivity::class.java) }
+        addDrawerItem(drawer, "EXPORT") { openActivity(ExportActivity::class.java) }
         addSpace(drawer, 25)
-
-        drawer.addView(drawerItem("HOME") {
-            drawerLayout.closeDrawer(Gravity.START)
-        }, fullParams(58))
-        addSpace(drawer, 10)
-
-        drawer.addView(drawerItem("TRIPS") {
-            drawerLayout.closeDrawer(Gravity.START)
-            startActivity(Intent(this, TripsActivity::class.java))
-        }, fullParams(58))
-        addSpace(drawer, 10)
-
-        drawer.addView(drawerItem("DAYS") {
-            drawerLayout.closeDrawer(Gravity.START)
-            startActivity(Intent(this, DaysActivity::class.java))
-        }, fullParams(58))
-        addSpace(drawer, 10)
-
-        drawer.addView(drawerItem("FUEL") {
-            drawerLayout.closeDrawer(Gravity.START)
-            showFuelMenu()
-        }, fullParams(58))
-        addSpace(drawer, 10)
-
-        drawer.addView(drawerItem("SETTINGS") {
-            drawerLayout.closeDrawer(Gravity.START)
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }, fullParams(58))
-        addSpace(drawer, 10)
-
-        drawer.addView(drawerItem("EXPORT") {
-            drawerLayout.closeDrawer(Gravity.START)
-            startActivity(Intent(this, ExportActivity::class.java))
-        }, fullParams(58))
-
-        addSpace(drawer, 30)
-        drawer.addView(createLabel("Background Odometer V14", "#777777"), wrapParams())
-
+        drawer.addView(createLabel("Background Odometer V15", "#777777"), wrapParams())
         return drawer
     }
 
-    private fun drawerItem(
-        text: String,
-        action: () -> Unit
-    ): TextView {
-        return createAction(text).apply {
-            setOnClickListener { action() }
+    private fun addDrawerItem(drawer: LinearLayout, text: String, action: () -> Unit) {
+        val item = createAction(text)
+        item.setOnClickListener {
+            drawerLayout.closeDrawer(Gravity.START)
+            action()
         }
+        drawer.addView(item, buttonParams())
+        addSpace(drawer, 8)
     }
 
-    private fun createMenuButton(
-        text: String
-    ): TextView {
-        return TextView(this).apply {
-            this.text = text
-            textSize = 30f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = buttonBackground(false)
-        }
+    private fun openActivity(clazz: Class<*>) {
+        startActivity(Intent(this, clazz))
     }
 
     private fun showFuelMenu() {
-
-        val options =
-            arrayOf(
-                "ADD FUEL",
-                "FUEL SETTINGS",
-                "FUEL HISTORY"
-            )
-
         AlertDialog.Builder(this)
             .setTitle("FUEL")
-            .setItems(options) { _, which ->
-
+            .setItems(arrayOf("ADD FUEL", "FUEL SETTINGS", "FUEL HISTORY")) { _, which ->
                 when (which) {
-
                     0 -> showAddFuelDialog()
-
                     1 -> showFuelSettingsDialog()
-
                     2 -> showFuelHistory()
                 }
             }
@@ -682,1217 +232,319 @@ class MainActivity : Activity() {
     }
 
     private fun showAddFuelDialog() {
-
-        val layout =
-            LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        layout.setPadding(
-            35,
-            10,
-            35,
-            10
-        )
-
-        val litres =
-            EditText(this)
-
-        litres.hint =
-            "Litres added"
-
-        litres.inputType =
-            2 or 8192
-
-        layout.addView(
-            litres,
-            wrapParams()
-        )
-
-        val note =
-            EditText(this)
-
-        note.hint =
-            "Note (optional)"
-
-        layout.addView(
-            note,
-            wrapParams()
-        )
-
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(30, 10, 30, 10)
+        val litres = EditText(this)
+        litres.hint = "Litres added"
+        litres.inputType = 2 or 8192
+        layout.addView(litres, wrapParams())
+        val note = EditText(this)
+        note.hint = "Note (optional)"
+        layout.addView(note, wrapParams())
         AlertDialog.Builder(this)
             .setTitle("ADD FUEL")
             .setView(layout)
-            .setNegativeButton(
-                "CANCEL",
-                null
-            )
-            .setPositiveButton(
-                "ADD"
-            ) { _, _ ->
-
-                val amount =
-                    litres.text
-                        .toString()
-                        .toDoubleOrNull()
-
-                if (
-                    amount == null ||
-                    amount <= 0.0
-                ) {
-
-                    Toast.makeText(
-                        this,
-                        "Enter valid litres",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("ADD") { _, _ ->
+                val amount = litres.text.toString().toDoubleOrNull()
+                if (amount == null || amount <= 0) {
+                    Toast.makeText(this, "Enter valid litres", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
-                database.addFuel(
-                    amount,
-                    note.text.toString()
-                )
-
+                database.addFuel(amount, note.text.toString())
                 refreshData()
             }
             .show()
     }
 
     private fun showFuelSettingsDialog() {
-
-        val layout =
-            LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        layout.setPadding(
-            35,
-            10,
-            35,
-            10
-        )
-
-        val tank =
-            EditText(this)
-
-        tank.hint =
-            "Tank capacity (L)"
-
-        tank.setText(
-            database.getTankCapacity()
-                .toString()
-        )
-
-        tank.inputType =
-            2 or 8192
-
-        layout.addView(
-            tank,
-            wrapParams()
-        )
-
-        val reserve =
-            EditText(this)
-
-        reserve.hint =
-            "Reserve fuel (L)"
-
-        reserve.setText(
-            database.getReserveFuel()
-                .toString()
-        )
-
-        reserve.inputType =
-            2 or 8192
-
-        layout.addView(
-            reserve,
-            wrapParams()
-        )
-
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(30, 10, 30, 10)
+        val tank = EditText(this)
+        tank.hint = "Tank capacity (L)"
+        tank.inputType = 2 or 8192
+        tank.setText(database.getTankCapacity().toString())
+        layout.addView(tank, wrapParams())
+        val reserve = EditText(this)
+        reserve.hint = "Reserve fuel (L)"
+        reserve.inputType = 2 or 8192
+        reserve.setText(database.getReserveFuel().toString())
+        layout.addView(reserve, wrapParams())
         AlertDialog.Builder(this)
             .setTitle("FUEL SETTINGS")
             .setView(layout)
-            .setNegativeButton(
-                "CANCEL",
-                null
-            )
-            .setPositiveButton(
-                "SAVE"
-            ) { _, _ ->
-
-                val tankValue =
-                    tank.text
-                        .toString()
-                        .toDoubleOrNull()
-
-                val reserveValue =
-                    reserve.text
-                        .toString()
-                        .toDoubleOrNull()
-
-                if (
-                    tankValue == null ||
-                    reserveValue == null ||
-                    tankValue <= 0 ||
-                    reserveValue < 0 ||
-                    reserveValue >= tankValue
-                ) {
-
-                    Toast.makeText(
-                        this,
-                        "Invalid fuel settings",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("SAVE") { _, _ ->
+                val tankValue = tank.text.toString().toDoubleOrNull()
+                val reserveValue = reserve.text.toString().toDoubleOrNull()
+                if (tankValue == null || reserveValue == null || tankValue <= 0 || reserveValue < 0 || reserveValue >= tankValue) {
+                    Toast.makeText(this, "Invalid fuel settings", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
-                database.setFuelSettings(
-                    tankValue,
-                    reserveValue
-                )
-
+                database.setFuelSettings(tankValue, reserveValue)
                 refreshData()
             }
             .show()
     }
 
     private fun showFuelHistory() {
-
-        val records =
-            database.getFuelRecords()
-
+        val records = database.getFuelRecords()
         if (records.isEmpty()) {
-
-            AlertDialog.Builder(this)
-                .setTitle("FUEL HISTORY")
-                .setMessage("No fuel records yet.")
-                .setPositiveButton(
-                    "OK",
-                    null
-                )
-                .show()
-
+            AlertDialog.Builder(this).setTitle("FUEL HISTORY").setMessage("No fuel records yet.").setPositiveButton("OK", null).show()
             return
         }
-
-        val layout =
-            LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        val scroll =
-            ScrollView(this)
-
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        val scroll = ScrollView(this)
         for (record in records) {
-
-            val row =
-                LinearLayout(this)
-
-            row.orientation =
-                LinearLayout.VERTICAL
-
-            row.setPadding(
-                15,
-                15,
-                15,
-                15
-            )
-
-            val date =
-                SimpleDateFormat(
-                    "dd MMM yyyy hh:mm a",
-                    Locale.getDefault()
-                ).format(
-                    Date(record.time)
-                )
-
-            val text =
-                TextView(this)
-
-            text.text =
-                "$date\n" +
-                    "+%.2f L   •   Fuel after %.2f L\n".format(
-                        record.litresAdded,
-                        record.fuelAfterLitres
-                    ) +
-                    if (
-                        record.note.isNotBlank()
-                    ) {
-                        record.note
-                    } else {
-                        ""
-                    }
-
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.VERTICAL
+            row.setPadding(12, 12, 12, 12)
+            val date = java.text.SimpleDateFormat("dd MMM yyyy hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(record.time))
+            val text = TextView(this)
+            text.text = "$date\n+%.2f L • Fuel after %.2f L\n%s".format(record.litresAdded, record.fuelAfterLitres, record.note)
             text.textSize = 15f
             text.setTextColor(Color.WHITE)
-
-            row.addView(
-                text,
-                wrapParams()
-            )
-
-            val buttons =
-                LinearLayout(this)
-
-            buttons.orientation =
-                LinearLayout.HORIZONTAL
-
-            val edit =
-                createAction("EDIT")
-
-            edit.setOnClickListener {
-
-                showEditFuelDialog(
-                    record
-                )
-            }
-
-            val delete =
-                createAction("DELETE")
-
+            row.addView(text, wrapParams())
+            val buttons = LinearLayout(this)
+            buttons.orientation = LinearLayout.HORIZONTAL
+            val edit = createAction("EDIT")
+            edit.setOnClickListener { showEditFuelDialog(record) }
+            val delete = createAction("DELETE")
             delete.setOnClickListener {
-
-                AlertDialog.Builder(this)
-                    .setTitle("DELETE FUEL?")
-                    .setMessage(
-                        "Delete this fuel record?"
-                    )
-                    .setNegativeButton(
-                        "CANCEL",
-                        null
-                    )
-                    .setPositiveButton(
-                        "DELETE"
-                    ) { _, _ ->
-
-                        database.deleteFuel(
-                            record.id
-                        )
-
-                        refreshData()
-
-                        showFuelHistory()
-                    }
-                    .show()
+                AlertDialog.Builder(this).setTitle("DELETE FUEL?").setMessage("Delete this fuel record?")
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("DELETE") { _, _ -> database.deleteFuel(record.id); refreshData(); showFuelHistory() }.show()
             }
-
-            buttons.addView(
-                edit,
-                halfParams()
-            )
-
-            buttons.addView(
-                delete,
-                halfParams()
-            )
-
-            row.addView(
-                buttons,
-                wrapParams()
-            )
-
-            layout.addView(
-                row,
-                wrapParams()
-            )
+            buttons.addView(edit, halfParams())
+            buttons.addView(delete, halfParams())
+            row.addView(buttons, wrapParams())
+            layout.addView(row, wrapParams())
         }
-
-        scroll.addView(
-            layout
-        )
-
-        AlertDialog.Builder(this)
-            .setTitle("FUEL HISTORY")
-            .setView(scroll)
-            .setPositiveButton(
-                "CLOSE",
-                null
-            )
-            .show()
+        scroll.addView(layout)
+        AlertDialog.Builder(this).setTitle("FUEL HISTORY").setView(scroll).setPositiveButton("CLOSE", null).show()
     }
 
-    private fun showEditFuelDialog(
-        record: FuelRecord
-    ) {
-
-        val layout =
-            LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        layout.setPadding(
-            35,
-            10,
-            35,
-            10
-        )
-
-        val litres =
-            EditText(this)
-
-        litres.setText(
-            record.litresAdded.toString()
-        )
-
-        litres.inputType =
-            2 or 8192
-
-        layout.addView(
-            litres,
-            wrapParams()
-        )
-
-        val note =
-            EditText(this)
-
-        note.setText(
-            record.note
-        )
-
-        layout.addView(
-            note,
-            wrapParams()
-        )
-
-        AlertDialog.Builder(this)
-            .setTitle("EDIT FUEL")
-            .setView(layout)
-            .setNegativeButton(
-                "CANCEL",
-                null
-            )
-            .setPositiveButton(
-                "SAVE"
-            ) { _, _ ->
-
-                val value =
-                    litres.text
-                        .toString()
-                        .toDoubleOrNull()
-
-                if (
-                    value == null ||
-                    value <= 0
-                ) {
-                    return@setPositiveButton
-                }
-
-                database.updateFuel(
-                    record.id,
-                    value,
-                    note.text.toString()
-                )
-
+    private fun showEditFuelDialog(record: FuelRecord) {
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(30, 10, 30, 10)
+        val litres = EditText(this)
+        litres.setText(record.litresAdded.toString())
+        litres.inputType = 2 or 8192
+        layout.addView(litres, wrapParams())
+        val note = EditText(this)
+        note.setText(record.note)
+        layout.addView(note, wrapParams())
+        AlertDialog.Builder(this).setTitle("EDIT FUEL").setView(layout)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("SAVE") { _, _ ->
+                val value = litres.text.toString().toDoubleOrNull()
+                if (value == null || value <= 0) return@setPositiveButton
+                database.updateFuel(record.id, value, note.text.toString())
                 refreshData()
-            }
-            .show()
+            }.show()
     }
 
     private fun startTracking() {
-
-        if (!hasLocationPermission()) {
-
-            requestLocationPermission()
-            return
-        }
-
-        if (!notificationsAllowed()) {
-
-            requestNotificationPermission()
-            return
-        }
-
-        preferences.edit()
-            .putBoolean(
-                PREF_AUTO_TRACKING,
-                true
-            )
-            .apply()
-
+        if (!hasLocationPermission()) { requestLocationPermission(); return }
+        if (!notificationsAllowed()) { requestNotificationPermission(); return }
+        preferences.edit().putBoolean(PREF_AUTO_TRACKING, true).apply()
         try {
-
-            ContextCompat.startForegroundService(
-                this,
-                Intent(
-                    this,
-                    LocationTrackingService::class.java
-                )
-            )
-
+            ContextCompat.startForegroundService(this, Intent(this, LocationTrackingService::class.java))
             trackingActive = true
-
-            trackingButton.text =
-                "STOP TRACKING"
-
-            trackingButton.background =
-                buttonBackground(true)
-
+            trackingButton.text = "STOP TRACKING"
+            trackingButton.background = buttonBackground(true)
             updateStatusFromCurrentGps()
-
             showBackgroundLocationHintOnce()
-
         } catch (_: Exception) {
-
-            preferences.edit()
-                .putBoolean(
-                    PREF_AUTO_TRACKING,
-                    false
-                )
-                .apply()
-
+            preferences.edit().putBoolean(PREF_AUTO_TRACKING, false).apply()
             trackingActive = false
-
-            Toast.makeText(
-                this,
-                "Unable to start tracking",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Unable to start tracking", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun stopTracking() {
-
-        preferences.edit()
-            .putBoolean(
-                PREF_AUTO_TRACKING,
-                false
-            )
-            .apply()
-
-        val intent =
-            Intent(
-                this,
-                LocationTrackingService::class.java
-            )
-
-        intent.action =
-            LocationTrackingService.ACTION_STOP
-
-        try {
-            startService(intent)
-        } catch (_: Exception) {
-        }
-
+        preferences.edit().putBoolean(PREF_AUTO_TRACKING, false).apply()
+        val intent = Intent(this, LocationTrackingService::class.java)
+        intent.action = LocationTrackingService.ACTION_STOP
+        try { startService(intent) } catch (_: Exception) { }
         trackingActive = false
-
-        trackingButton.text =
-            "START TRACKING"
-
-        trackingButton.background =
-            buttonBackground(false)
-
-        statusText.text =
-            "GPS STATUS\nTRACKING STOPPED"
-
-        speedText.text =
-            "0.0 km/h"
-
+        trackingButton.text = "START TRACKING"
+        trackingButton.background = buttonBackground(false)
+        statusText.text = "GPS STATUS\nTRACKING STOPPED"
+        speedText.text = "0.0 km/h"
         refreshData()
     }
 
     private fun updateStatusFromCurrentGps() {
-
-        if (!isLocationEnabled()) {
-
-            updateStatus(
-                "GPS OFF\nWAITING"
-            )
-
-        } else {
-
-            updateStatus(
-                "GPS ON\nTRACKING ACTIVE"
-            )
-        }
+        updateStatus(if (isLocationEnabled()) "GPS ON\nTRACKING ACTIVE" else "GPS OFF\nWAITING")
     }
 
-    private fun updateStatus(
-        status: String
-    ) {
-
-        statusText.text =
-            "GPS STATUS\n$status"
-
-        val lower =
-            status.lowercase()
-
-        statusText.setTextColor(
-            if (
-                lower.contains("tracking") ||
-                lower.contains("gps on")
-            ) {
-                Color.parseColor(TIFFANY)
-            } else {
-                Color.LTGRAY
-            }
-        )
+    private fun updateStatus(status: String) {
+        statusText.text = "GPS STATUS\n$status"
+        val lower = status.lowercase()
+        statusText.setTextColor(if (lower.contains("tracking") || lower.contains("gps on")) Color.parseColor(TIFFANY) else Color.LTGRAY)
     }
 
     private fun isLocationEnabled(): Boolean {
-
-        val manager =
-            getSystemService(
-                Context.LOCATION_SERVICE
-            ) as android.location.LocationManager
-
+        val manager = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
         return try {
-
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.P
-            ) {
-
-                manager.isLocationEnabled
-
-            } else {
-
-                manager.isProviderEnabled(
-                    android.location.LocationManager.GPS_PROVIDER
-                ) ||
-                    manager.isProviderEnabled(
-                        android.location.LocationManager.NETWORK_PROVIDER
-                    )
-            }
-
-        } catch (_: Exception) {
-
-            false
-        }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) manager.isLocationEnabled
+            else manager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) || manager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) { false }
     }
 
     private fun refreshData() {
+        if (!::totalText.isInitialized) return
+        totalText.text = "%.2f km".format(database.getTotalOdometer())
+        todayText.text = "%.2f km".format(database.getTodayDistance())
+        averageText.text = "%.1f km/h".format(database.getAverageSpeed())
+        maxText.text = "%.1f km/h".format(database.getMaximumSpeed())
+        speedText.text = "%.1f km/h".format(database.getCurrentSpeed())
 
-        totalText.text =
-            "%.2f km".format(
-                database.getTotalOdometer()
-            )
+        val fuel = database.getCurrentFuel()
+        val tank = database.getTankCapacity()
+        fuelText.text = "%.2f L / %.2f L".format(fuel, tank)
+        val mileage = database.getAverageMileage()
+        rangeText.text = if (mileage > 0) "Range: %.1f km • Mileage: %.2f km/L".format(database.getOverallRange(), mileage) else "Range: -- • Mileage: --"
 
-        todayText.text =
-            "%.2f km".format(
-                database.getTodayDistance()
-            )
-
-        val trip =
-            database.getLastCompletedTrip()
-
-        if (trip == null) {
-
-            lastTripText.text =
-                "No trips yet"
-
-            averageText.text =
-                "0.0 km/h"
-
-            maxText.text =
-                "0.0 km/h"
-
-        } else {
-
-            lastTripText.text =
-                "%.2f km".format(
-                    trip.distanceKm
-                )
-
-            averageText.text =
-                "%.1f km/h".format(
-                    trip.averageSpeed
-                )
-
-            maxText.text =
-                "%.1f km/h".format(
-                    trip.maxSpeed
-                )
-        }
-
-        val fuel =
-            database.getCurrentFuel()
-
-        fuelText.text =
-            "%.2f L / %.2f L".format(
-                fuel,
-                database.getTankCapacity()
-            )
-
-        val mileage =
-            database.getAverageMileage()
-
-        mileageText.text =
-            if (mileage > 0) {
-                "Mileage: %.2f km/L".format(
-                    mileage
-                )
-            } else {
-                "Mileage: --"
-            }
-
-        val overallRange =
-            database.getOverallRange()
-
-        rangeText.text =
-            if (mileage > 0) {
-                "Overall range: %.1f km".format(
-                    overallRange
-                )
-            } else {
-                "Overall range: --"
-            }
-
-        val reserveRange =
-            database.getRangeToReserve()
-
-        reserveRangeText.text =
-            if (mileage > 0) {
-                "Range until reserve: %.1f km".format(
-                    reserveRange
-                )
-            } else {
-                "Range until reserve: --"
-            }
-
-        val reached =
-            database.isReserveReached()
-
-        reserveReachedButton.background =
-            statusButtonBackground(
-                reached
-            )
-
-        reserveReachedButton.setTextColor(
-            if (reached) {
-                Color.WHITE
-            } else {
-                Color.GRAY
-            }
-        )
-
-        val crossed =
-            database.isReserveCrossed()
-
-        reserveCrossedButton.background =
-            statusButtonBackground(
-                crossed
-            )
-
-        reserveCrossedButton.setTextColor(
-            if (crossed) {
-                Color.WHITE
-            } else {
-                Color.GRAY
-            }
-        )
+        val below = database.isReserveReached()
+        reserveStatusText.text = if (below) "BELOW RESERVE" else "ABOVE RESERVE"
+        reserveStatusText.background = statusBackground(below)
+        reserveStatusText.setTextColor(if (below) Color.WHITE else Color.parseColor(TIFFANY))
     }
 
     private fun showBackgroundLocationHintOnce() {
-
-        if (
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.Q
-        ) {
-            return
-        }
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-
-        if (
-            preferences.getBoolean(
-                PREF_BACKGROUND_HINT,
-                false
-            )
-        ) {
-            return
-        }
-
-        preferences.edit()
-            .putBoolean(
-                PREF_BACKGROUND_HINT,
-                true
-            )
-            .apply()
-
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) return
+        if (preferences.getBoolean(PREF_BACKGROUND_HINT, false)) return
+        preferences.edit().putBoolean(PREF_BACKGROUND_HINT, true).apply()
         AlertDialog.Builder(this)
-            .setTitle(
-                "Background location"
-            )
-            .setMessage(
-                "For the strongest automatic tracking support, " +
-                    "including restarting after a phone reboot, " +
-                    "set Background Odometer location permission to " +
-                    "\"Allow all the time\" in Android settings."
-            )
-            .setNegativeButton(
-                "LATER",
-                null
-            )
-            .setPositiveButton(
-                "OPEN SETTINGS"
-            ) { _, _ ->
-
+            .setTitle("Background location")
+            .setMessage("For the strongest automatic tracking support, including restarting after a phone reboot, set Background Odometer location permission to \"Allow all the time\" in Android settings.")
+            .setNegativeButton("LATER", null)
+            .setPositiveButton("OPEN SETTINGS") { _, _ ->
                 try {
-
-                    val intent =
-                        Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                        )
-
-                    intent.data =
-                        Uri.parse(
-                            "package:$packageName"
-                        )
-
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    intent.data = Uri.parse("package:$packageName")
                     startActivity(intent)
-
-                } catch (_: Exception) {
-                }
-            }
-            .show()
+                } catch (_: Exception) { }
+            }.show()
     }
 
-    private fun notificationsAllowed(): Boolean {
-
-        return if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.TIRAMISU
-        ) {
-
-            NotificationManagerCompat
-                .from(this)
-                .areNotificationsEnabled()
-
-        } else {
-
-            true
-        }
-    }
+    private fun notificationsAllowed(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) NotificationManagerCompat.from(this).areNotificationsEnabled() else true
 
     private fun requestNotificationPermission() {
-
-        if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.TIRAMISU
-        ) {
-
-            if (
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(
-                        Manifest.permission.POST_NOTIFICATIONS
-                    ),
-                    REQUEST_NOTIFICATIONS
-                )
-
-            } else {
-
-                openNotificationSettings()
-            }
-
-        } else {
-
-            openNotificationSettings()
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        } else openNotificationSettings()
     }
 
     private fun openNotificationSettings() {
-
         try {
-
-            val intent =
-                Intent(
-                    Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                )
-
-            intent.putExtra(
-                Settings.EXTRA_APP_PACKAGE,
-                packageName
-            )
-
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
             startActivity(intent)
-
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) { }
     }
 
     private fun requestLocationPermission() {
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ),
-                REQUEST_LOCATION
-            )
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQUEST_LOCATION)
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
+    private fun hasLocationPermission(): Boolean = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) ==
-            PackageManager.PERMISSION_GRANTED
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) Toast.makeText(this, if (notificationsAllowed()) "Notifications enabled." else "Please allow notifications.", Toast.LENGTH_LONG).show()
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-
-        super.onRequestPermissionsResult(
-            requestCode,
-            permissions,
-            grantResults
-        )
-
-        if (
-            requestCode ==
-            REQUEST_NOTIFICATIONS
-        ) {
-
-            Toast.makeText(
-                this,
-                if (notificationsAllowed()) {
-                    "Notifications enabled."
-                } else {
-                    "Please allow notifications."
-                },
-                Toast.LENGTH_LONG
-            ).show()
-        }
+    private fun createTitle(text: String) = TextView(this).apply {
+        this.text = text; textSize = 23f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
     }
 
-    private fun createTitle(
-        text: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 25f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
+    private fun createLabel(text: String, color: String) = TextView(this).apply {
+        this.text = text; textSize = 14f; setTextColor(Color.parseColor(color)); gravity = Gravity.CENTER
     }
 
-    private fun createLabel(
-        text: String,
-        color: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 15f
-            setTextColor(
-                Color.parseColor(color)
-            )
-            gravity = Gravity.CENTER
-        }
+    private fun createLargeValue(text: String) = TextView(this).apply {
+        this.text = text; textSize = 43f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
     }
 
-    private fun createLargeValue(
-        text: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 46f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
+    private fun createMediumValue(text: String) = TextView(this).apply {
+        this.text = text; textSize = 23f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
     }
 
-    private fun createMediumValue(
-        text: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 25f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
+    private fun createStatColumn(label: String, value: String): Pair<LinearLayout, TextView> {
+        val column = LinearLayout(this)
+        column.orientation = LinearLayout.VERTICAL; column.gravity = Gravity.CENTER
+        column.addView(createLabel(label, "#777777"), wrapParams())
+        val v = createMediumValue(value); v.textSize = 18f
+        column.addView(v, wrapParams())
+        return Pair(column, v)
     }
 
-    private fun createStatColumn(
-        label: String,
-        value: String
-    ): Pair<LinearLayout, TextView> {
-
-        val column =
-            LinearLayout(this)
-
-        column.orientation =
-            LinearLayout.VERTICAL
-
-        column.gravity =
-            Gravity.CENTER
-
-        column.addView(
-            createLabel(
-                label,
-                "#777777"
-            ),
-            wrapParams()
-        )
-
-        val valueView =
-            createMediumValue(value)
-
-        valueView.textSize = 20f
-
-        column.addView(
-            valueView,
-            wrapParams()
-        )
-
-        return Pair(
-            column,
-            valueView
-        )
+    private fun createAction(text: String) = TextView(this).apply {
+        this.text = text; textSize = 16f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; background = buttonBackground(false); minHeight = dp(58); setPadding(8, 12, 8, 12)
     }
 
-    private fun createAction(
-        text: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 17f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            background =
-                buttonBackground(false)
-        }
+    private fun createMenuButton(text: String) = TextView(this).apply {
+        this.text = text; textSize = 29f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = buttonBackground(false)
     }
 
-    private fun createStatusButton(
-        text: String,
-        active: Boolean
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-
-            background =
-                statusButtonBackground(active)
-        }
+    private fun createStatusText(text: String, active: Boolean) = TextView(this).apply {
+        this.text = text; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setPadding(8, 12, 8, 12); background = statusBackground(active)
     }
 
-    private fun buttonBackground(
-        active: Boolean
-    ): GradientDrawable {
-
-        return GradientDrawable().apply {
-
-            cornerRadius = 18f
-
-            setColor(
-                Color.parseColor(
-                    if (active) {
-                        "#07383E"
-                    } else {
-                        DARK
-                    }
-                )
-            )
-
-            setStroke(
-                2,
-                Color.parseColor(TIFFANY)
-            )
-        }
+    private fun cardBackground() = GradientDrawable().apply {
+        cornerRadius = 18f; setColor(Color.rgb(16,16,16)); setStroke(1, Color.rgb(50,50,50))
     }
 
-    private fun statusButtonBackground(
-        active: Boolean
-    ): GradientDrawable {
-
-        return GradientDrawable().apply {
-
-            cornerRadius = 16f
-
-            setColor(
-                Color.parseColor(
-                    if (active) {
-                        "#07383E"
-                    } else {
-                        "#101010"
-                    }
-                )
-            )
-
-            setStroke(
-                2,
-                Color.parseColor(
-                    if (active) {
-                        TIFFANY
-                    } else {
-                        "#444444"
-                    }
-                )
-            )
-        }
+    private fun buttonBackground(active: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f; setColor(Color.parseColor(if (active) "#07383E" else DARK)); setStroke(2, Color.parseColor(TIFFANY))
     }
 
-    private fun wrapParams():
-        LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
+    private fun statusBackground(active: Boolean) = GradientDrawable().apply {
+        cornerRadius = 14f; setColor(Color.parseColor(if (active) "#07383E" else "#101010")); setStroke(2, Color.parseColor(if (active) TIFFANY else "#444444"))
     }
 
-    private fun fullParams(
-        height: Int
-    ): LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            height
-        )
-    }
-
-    private fun halfParams():
-        LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            0,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            1f
-        )
-    }
-
-    private fun addSpace(
-        parent: LinearLayout,
-        height: Int
-    ) {
-
-        parent.addView(
-            View(this),
-            LinearLayout.LayoutParams(
-                1,
-                height
-            )
-        )
-    }
+    private fun wrapParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun buttonParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 2; bottomMargin = 2 }
+    private fun halfParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    private fun addSpace(parent: LinearLayout, height: Int) { parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height))) }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onResume() {
-
         super.onResume()
-
-        val filter =
-            IntentFilter().apply {
-
-                addAction(
-                    LocationTrackingService.ACTION_SPEED_UPDATE
-                )
-
-                addAction(
-                    LocationTrackingService.ACTION_STATUS_UPDATE
-                )
-            }
-
-        ContextCompat.registerReceiver(
-            this,
-            serviceReceiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
-        trackingActive =
-            preferences.getBoolean(
-                PREF_AUTO_TRACKING,
-                false
-            )
-
-        trackingButton.text =
-            if (trackingActive) {
-                "STOP TRACKING"
-            } else {
-                "START TRACKING"
-            }
-
-        trackingButton.background =
-            buttonBackground(trackingActive)
-
-        if (trackingActive) {
-            updateStatusFromCurrentGps()
+        val filter = IntentFilter().apply {
+            addAction(LocationTrackingService.ACTION_SPEED_UPDATE)
+            addAction(LocationTrackingService.ACTION_STATUS_UPDATE)
         }
-
-        refreshData()
+        try { ContextCompat.registerReceiver(this, serviceReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED) } catch (_: Exception) { }
+        trackingActive = preferences.getBoolean(PREF_AUTO_TRACKING, false)
+        if (::trackingButton.isInitialized) {
+            trackingButton.text = if (trackingActive) "STOP TRACKING" else "START TRACKING"
+            trackingButton.background = buttonBackground(trackingActive)
+            if (trackingActive) updateStatusFromCurrentGps()
+            refreshData()
+        }
     }
 
     override fun onPause() {
-
-        try {
-            unregisterReceiver(
-                serviceReceiver
-            )
-        } catch (_: Exception) {
-        }
-
+        try { unregisterReceiver(serviceReceiver) } catch (_: Exception) { }
         super.onPause()
     }
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        val drawerLayout = findViewById<DrawerLayout>(android.R.id.content)
-        if (drawerLayout != null && drawerLayout.isDrawerOpen(Gravity.START)) {
-            drawerLayout.closeDrawer(Gravity.START)
-            return
-        }
+        if (::drawerLayout.isInitialized && drawerLayout.isDrawerOpen(Gravity.START)) { drawerLayout.closeDrawer(Gravity.START); return }
         super.onBackPressed()
     }
 
-    override fun onDestroy() {
-
-        database.close()
-
-        super.onDestroy()
-    }
+    override fun onDestroy() { database.close(); super.onDestroy() }
 }
