@@ -63,6 +63,7 @@ class MainActivity : Activity() {
     companion object {
 
         private const val TIFFANY = "#00BCD4"
+        private const val DARK = "#151515"
 
         private const val REQUEST_LOCATION = 100
         private const val REQUEST_NOTIFICATIONS = 101
@@ -140,73 +141,7 @@ class MainActivity : Activity() {
 
         requestLocationPermission()
 
-        requestNotificationPermissionIfNeeded()
-
         refreshData()
-    }
-
-    override fun onResume() {
-
-        super.onResume()
-
-        if (::database.isInitialized) {
-            refreshData()
-        }
-
-        registerServiceReceiver()
-    }
-
-    override fun onPause() {
-
-        unregisterServiceReceiver()
-
-        super.onPause()
-    }
-
-    private fun registerServiceReceiver() {
-
-        try {
-
-            val filter =
-                IntentFilter()
-
-            filter.addAction(
-                LocationTrackingService.ACTION_SPEED_UPDATE
-            )
-
-            filter.addAction(
-                LocationTrackingService.ACTION_STATUS_UPDATE
-            )
-
-            if (Build.VERSION.SDK_INT >= 33) {
-
-                registerReceiver(
-                    serviceReceiver,
-                    filter,
-                    Context.RECEIVER_NOT_EXPORTED
-                )
-
-            } else {
-
-                @Suppress("DEPRECATION")
-                registerReceiver(
-                    serviceReceiver,
-                    filter
-                )
-            }
-
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun unregisterServiceReceiver() {
-
-        try {
-            unregisterReceiver(
-                serviceReceiver
-            )
-        } catch (_: Exception) {
-        }
     }
 
     private fun buildInterface() {
@@ -214,9 +149,7 @@ class MainActivity : Activity() {
         val scroll =
             ScrollView(this)
 
-        scroll.setBackgroundColor(
-            Color.BLACK
-        )
+        scroll.setBackgroundColor(Color.BLACK)
 
         val root =
             LinearLayout(this)
@@ -235,9 +168,7 @@ class MainActivity : Activity() {
         )
 
         root.addView(
-            createTitle(
-                "BACKGROUND ODOMETER"
-            ),
+            createTitle("BACKGROUND ODOMETER"),
             wrapParams()
         )
 
@@ -252,9 +183,7 @@ class MainActivity : Activity() {
         )
 
         totalText =
-            createLargeValue(
-                "0.00 km"
-            )
+            createLargeValue("0.00 km")
 
         root.addView(
             totalText,
@@ -272,9 +201,7 @@ class MainActivity : Activity() {
         )
 
         todayText =
-            createMediumValue(
-                "0.00 km"
-            )
+            createMediumValue("0.00 km")
 
         root.addView(
             todayText,
@@ -292,9 +219,7 @@ class MainActivity : Activity() {
         )
 
         speedText =
-            createMediumValue(
-                "0.0 km/h"
-            )
+            createMediumValue("0.0 km/h")
 
         root.addView(
             speedText,
@@ -353,15 +278,9 @@ class MainActivity : Activity() {
         statusText.text =
             "GPS STATUS\nREADY"
 
-        statusText.textSize =
-            16f
-
-        statusText.setTextColor(
-            Color.LTGRAY
-        )
-
-        statusText.gravity =
-            Gravity.CENTER
+        statusText.textSize = 16f
+        statusText.setTextColor(Color.LTGRAY)
+        statusText.gravity = Gravity.CENTER
 
         root.addView(
             statusText,
@@ -371,9 +290,7 @@ class MainActivity : Activity() {
         addSpace(root, 15)
 
         trackingButton =
-            createAction(
-                "START TRACKING"
-            )
+            createAction("START TRACKING")
 
         trackingButton.setOnClickListener {
 
@@ -392,12 +309,9 @@ class MainActivity : Activity() {
         addSpace(root, 10)
 
         val refresh =
-            createAction(
-                "REFRESH"
-            )
+            createAction("REFRESH")
 
         refresh.setOnClickListener {
-
             refreshData()
         }
 
@@ -409,9 +323,7 @@ class MainActivity : Activity() {
         addSpace(root, 10)
 
         val trips =
-            createAction(
-                "TRIPS"
-            )
+            createAction("TRIPS")
 
         trips.setOnClickListener {
 
@@ -431,9 +343,7 @@ class MainActivity : Activity() {
         addSpace(root, 10)
 
         val days =
-            createAction(
-                "DAYS"
-            )
+            createAction("DAYS")
 
         days.setOnClickListener {
 
@@ -450,28 +360,6 @@ class MainActivity : Activity() {
             fullParams(58)
         )
 
-        addSpace(root, 10)
-
-        val settings =
-            createAction(
-                "SETTINGS"
-            )
-
-        settings.setOnClickListener {
-
-            startActivity(
-                Intent(
-                    this,
-                    SettingsActivity::class.java
-                )
-            )
-        }
-
-        root.addView(
-            settings,
-            fullParams(58)
-        )
-
         addSpace(root, 25)
 
         root.addView(
@@ -485,9 +373,7 @@ class MainActivity : Activity() {
         addSpace(root, 5)
 
         fuelText =
-            createMediumValue(
-                "0.00 L"
-            )
+            createMediumValue("0.00 L")
 
         root.addView(
             fuelText,
@@ -562,9 +448,7 @@ class MainActivity : Activity() {
         addSpace(root, 10)
 
         val fuel =
-            createAction(
-                "FUEL"
-            )
+            createAction("FUEL")
 
         fuel.setOnClickListener {
             showFuelMenu()
@@ -578,9 +462,7 @@ class MainActivity : Activity() {
         addSpace(root, 10)
 
         val history =
-            createAction(
-                "FUEL HISTORY"
-            )
+            createAction("FUEL HISTORY")
 
         history.setOnClickListener {
             showFuelHistory()
@@ -602,12 +484,9 @@ class MainActivity : Activity() {
         )
 
         lastTripText =
-            createMediumValue(
-                "No trips yet"
-            )
+            createMediumValue("No trips yet")
 
-        lastTripText.textSize =
-            20f
+        lastTripText.textSize = 20f
 
         root.addView(
             lastTripText,
@@ -634,28 +513,6 @@ class MainActivity : Activity() {
         root.addView(
             threshold,
             wrapParams()
-        )
-
-        addSpace(root, 20)
-
-        val distanceAlert =
-            createAction(
-                "DISTANCE ALERT"
-            )
-
-        distanceAlert.setOnClickListener {
-
-            startActivity(
-                Intent(
-                    this,
-                    SettingsActivity::class.java
-                )
-            )
-        }
-
-        root.addView(
-            distanceAlert,
-            fullParams(58)
         )
 
         addSpace(root, 35)
@@ -694,14 +551,11 @@ class MainActivity : Activity() {
 
                 when (which) {
 
-                    0 ->
-                        showAddFuelDialog()
+                    0 -> showAddFuelDialog()
 
-                    1 ->
-                        showFuelSettingsDialog()
+                    1 -> showFuelSettingsDialog()
 
-                    2 ->
-                        showFuelHistory()
+                    2 -> showFuelHistory()
                 }
             }
             .show()
@@ -748,9 +602,7 @@ class MainActivity : Activity() {
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "ADD FUEL"
-            )
+            .setTitle("ADD FUEL")
             .setView(layout)
             .setNegativeButton(
                 "CANCEL",
@@ -843,9 +695,7 @@ class MainActivity : Activity() {
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "FUEL SETTINGS"
-            )
+            .setTitle("FUEL SETTINGS")
             .setView(layout)
             .setNegativeButton(
                 "CANCEL",
@@ -900,12 +750,8 @@ class MainActivity : Activity() {
         if (records.isEmpty()) {
 
             AlertDialog.Builder(this)
-                .setTitle(
-                    "FUEL HISTORY"
-                )
-                .setMessage(
-                    "No fuel records yet."
-                )
+                .setTitle("FUEL HISTORY")
+                .setMessage("No fuel records yet.")
                 .setPositiveButton(
                     "OK",
                     null
@@ -964,12 +810,8 @@ class MainActivity : Activity() {
                         ""
                     }
 
-            text.textSize =
-                15f
-
-            text.setTextColor(
-                Color.WHITE
-            )
+            text.textSize = 15f
+            text.setTextColor(Color.WHITE)
 
             row.addView(
                 text,
@@ -983,9 +825,7 @@ class MainActivity : Activity() {
                 LinearLayout.HORIZONTAL
 
             val edit =
-                createAction(
-                    "EDIT"
-                )
+                createAction("EDIT")
 
             edit.setOnClickListener {
 
@@ -995,16 +835,12 @@ class MainActivity : Activity() {
             }
 
             val delete =
-                createAction(
-                    "DELETE"
-                )
+                createAction("DELETE")
 
             delete.setOnClickListener {
 
                 AlertDialog.Builder(this)
-                    .setTitle(
-                        "DELETE FUEL?"
-                    )
+                    .setTitle("DELETE FUEL?")
                     .setMessage(
                         "Delete this fuel record?"
                     )
@@ -1029,20 +865,12 @@ class MainActivity : Activity() {
 
             buttons.addView(
                 edit,
-                LinearLayout.LayoutParams(
-                    0,
-                    55,
-                    1f
-                )
+                halfParams()
             )
 
             buttons.addView(
                 delete,
-                LinearLayout.LayoutParams(
-                    0,
-                    55,
-                    1f
-                )
+                halfParams()
             )
 
             row.addView(
@@ -1057,17 +885,11 @@ class MainActivity : Activity() {
         }
 
         scroll.addView(
-            layout,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            layout
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "FUEL HISTORY"
-            )
+            .setTitle("FUEL HISTORY")
             .setView(scroll)
             .setPositiveButton(
                 "CLOSE",
@@ -1077,8 +899,7 @@ class MainActivity : Activity() {
     }
 
     private fun showEditFuelDialog(
-        record:
-            OdometerDatabaseHelper.FuelRecord
+        record: FuelRecord
     ) {
 
         val layout =
@@ -1097,9 +918,6 @@ class MainActivity : Activity() {
         val litres =
             EditText(this)
 
-        litres.hint =
-            "Litres"
-
         litres.setText(
             record.litresAdded.toString()
         )
@@ -1115,9 +933,6 @@ class MainActivity : Activity() {
         val note =
             EditText(this)
 
-        note.hint =
-            "Note"
-
         note.setText(
             record.note
         )
@@ -1128,9 +943,7 @@ class MainActivity : Activity() {
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "EDIT FUEL"
-            )
+            .setTitle("EDIT FUEL")
             .setView(layout)
             .setNegativeButton(
                 "CANCEL",
@@ -1140,96 +953,40 @@ class MainActivity : Activity() {
                 "SAVE"
             ) { _, _ ->
 
-                val amount =
+                val value =
                     litres.text
                         .toString()
                         .toDoubleOrNull()
 
                 if (
-                    amount == null ||
-                    amount <= 0.0
+                    value == null ||
+                    value <= 0
                 ) {
-
-                    Toast.makeText(
-                        this,
-                        "Enter valid litres",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
                     return@setPositiveButton
                 }
 
                 database.updateFuel(
                     record.id,
-                    amount,
+                    value,
                     note.text.toString()
                 )
 
                 refreshData()
-
-                showFuelHistory()
             }
             .show()
     }
-        private fun startTracking() {
+
+    private fun startTracking() {
 
         if (!hasLocationPermission()) {
 
             requestLocationPermission()
-
-            Toast.makeText(
-                this,
-                "Location permission is required",
-                Toast.LENGTH_LONG
-            ).show()
-
             return
         }
 
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasNotificationPermission()
-        ) {
+        if (!notificationsAllowed()) {
 
-            requestNotificationPermissionIfNeeded()
-
-            Toast.makeText(
-                this,
-                "Allow notifications and try again",
-                Toast.LENGTH_LONG
-            ).show()
-
-            return
-        }
-
-        if (!isLocationEnabled()) {
-
-            AlertDialog.Builder(this)
-                .setTitle("GPS IS OFF")
-                .setMessage(
-                    "Turn on Location/GPS to start background tracking."
-                )
-                .setNegativeButton(
-                    "CANCEL",
-                    null
-                )
-                .setPositiveButton(
-                    "OPEN SETTINGS"
-                ) { _, _ ->
-
-                    try {
-
-                        startActivity(
-                            Intent(
-                                Settings.ACTION_LOCATION_SOURCE_SETTINGS
-                            )
-                        )
-
-                    } catch (_: Exception) {
-                    }
-                }
-                .show()
-
+            requestNotificationPermission()
             return
         }
 
@@ -1240,35 +997,42 @@ class MainActivity : Activity() {
             )
             .apply()
 
-        val intent =
-            Intent(
-                this,
-                LocationTrackingService::class.java
-            )
-
-        intent.action =
-            LocationTrackingService.ACTION_START
-
         try {
 
             ContextCompat.startForegroundService(
                 this,
-                intent
+                Intent(
+                    this,
+                    LocationTrackingService::class.java
+                )
             )
 
             trackingActive = true
 
-            updateTrackingButton()
+            trackingButton.text =
+                "STOP TRACKING"
 
-            updateStatus(
-                "TRACKING\nGPS ACTIVE"
-            )
+            trackingButton.background =
+                buttonBackground(true)
 
-        } catch (e: Exception) {
+            updateStatusFromCurrentGps()
+
+            showBackgroundLocationHintOnce()
+
+        } catch (_: Exception) {
+
+            preferences.edit()
+                .putBoolean(
+                    PREF_AUTO_TRACKING,
+                    false
+                )
+                .apply()
+
+            trackingActive = false
 
             Toast.makeText(
                 this,
-                "Unable to start tracking: ${e.message}",
+                "Unable to start tracking",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -1293,169 +1057,39 @@ class MainActivity : Activity() {
             LocationTrackingService.ACTION_STOP
 
         try {
-
             startService(intent)
-
         } catch (_: Exception) {
         }
 
         trackingActive = false
 
-        updateTrackingButton()
+        trackingButton.text =
+            "START TRACKING"
 
-        updateStatus(
-            "TRACKING STOPPED"
-        )
+        trackingButton.background =
+            buttonBackground(false)
+
+        statusText.text =
+            "GPS STATUS\nTRACKING STOPPED"
+
+        speedText.text =
+            "0.0 km/h"
 
         refreshData()
     }
 
-    private fun refreshData() {
+    private fun updateStatusFromCurrentGps() {
 
-        try {
+        if (!isLocationEnabled()) {
 
-            val total =
-                database.getTotalOdometer()
-
-            totalText.text =
-                "%.2f km".format(total)
-
-            val today =
-                database.getTodayDistance()
-
-            todayText.text =
-                "%.2f km".format(today)
-
-            val speed =
-                database.getCurrentSpeed()
-
-            speedText.text =
-                "%.1f km/h".format(speed)
-
-            val average =
-                database.getAverageSpeed()
-
-            averageText.text =
-                "%.1f km/h".format(average)
-
-            val maximum =
-                database.getMaximumSpeed()
-
-            maxText.text =
-                "%.1f km/h".format(maximum)
-
-            trackingActive =
-                preferences.getBoolean(
-                    PREF_AUTO_TRACKING,
-                    false
-                )
-
-            updateTrackingButton()
-
-            val fuel =
-                database.getCurrentFuel()
-
-            fuelText.text =
-                "%.2f L".format(fuel)
-
-            val mileage =
-                database.getMileage()
-
-            if (mileage > 0.0) {
-
-                mileageText.text =
-                    "Mileage: %.2f km/L".format(
-                        mileage
-                    )
-
-            } else {
-
-                mileageText.text =
-                    "Mileage: --"
-            }
-
-            val range =
-                database.getEstimatedRange()
-
-            if (range >= 0.0) {
-
-                rangeText.text =
-                    "Overall range: %.1f km".format(
-                        range
-                    )
-
-            } else {
-
-                rangeText.text =
-                    "Overall range: --"
-            }
-
-            val reserveRange =
-                database.getRangeUntilReserve()
-
-            if (reserveRange >= 0.0) {
-
-                reserveRangeText.text =
-                    "Range until reserve: %.1f km".format(
-                        reserveRange
-                    )
-
-            } else {
-
-                reserveRangeText.text =
-                    "Range until reserve: --"
-            }
-
-            updateReserveButtons()
-
-            val lastTrip =
-                database.getLastCompletedTrip()
-
-            if (lastTrip != null) {
-
-                lastTripText.text =
-                    "%.2f km  •  %.1f km/h".format(
-                        lastTrip.distanceKm,
-                        lastTrip.averageSpeedKmh
-                    )
-
-            } else {
-
-                lastTripText.text =
-                    "No trips yet"
-            }
-
-            updateGpsStatus()
-
-        } catch (e: Exception) {
-
-            // Keep the screen usable even if a refresh
-            // occurs while the database/service is changing.
-        }
-    }
-
-    private fun updateTrackingButton() {
-
-        if (!::trackingButton.isInitialized) {
-            return
-        }
-
-        if (trackingActive) {
-
-            trackingButton.text =
-                "STOP TRACKING"
-
-            trackingButton.setTextColor(
-                Color.WHITE
+            updateStatus(
+                "GPS OFF\nWAITING"
             )
 
         } else {
 
-            trackingButton.text =
-                "START TRACKING"
-
-            trackingButton.setTextColor(
-                Color.WHITE
+            updateStatus(
+                "GPS ON\nTRACKING ACTIVE"
             )
         }
     }
@@ -1464,193 +1098,193 @@ class MainActivity : Activity() {
         status: String
     ) {
 
-        if (!::statusText.isInitialized) {
-            return
-        }
-
         statusText.text =
             "GPS STATUS\n$status"
-    }
 
-    private fun updateGpsStatus() {
+        val lower =
+            status.lowercase()
 
-        if (!::statusText.isInitialized) {
-            return
-        }
-
-        val enabled =
-            isLocationEnabled()
-
-        if (!enabled) {
-
-            statusText.text =
-                "GPS STATUS\nGPS OFF"
-
-            return
-        }
-
-        if (trackingActive) {
-
-            statusText.text =
-                "GPS STATUS\nTRACKING ACTIVE"
-
-        } else {
-
-            statusText.text =
-                "GPS STATUS\nGPS READY"
-        }
-    }
-
-    private fun updateReserveButtons() {
-
-        try {
-
-            val fuel =
-                database.getCurrentFuel()
-
-            val reserve =
-                database.getReserveFuel()
-
-            if (fuel <= reserve) {
-
-                reserveReachedButton.text =
-                    "RESERVE REACHED"
-
-                reserveReachedButton.setTextColor(
-                    Color.WHITE
-                )
-
-            } else {
-
-                reserveReachedButton.text =
-                    "RESERVE NOT REACHED"
-
-                reserveReachedButton.setTextColor(
-                    Color.LTGRAY
-                )
-            }
-
-            val crossed =
-                database.hasReserveBeenCrossed()
-
-            if (crossed) {
-
-                reserveCrossedButton.text =
-                    "RESERVE CROSSED"
-
-                reserveCrossedButton.setTextColor(
-                    Color.WHITE
-                )
-
-            } else {
-
-                reserveCrossedButton.text =
-                    "RESERVE NOT CROSSED"
-
-                reserveCrossedButton.setTextColor(
-                    Color.LTGRAY
-                )
-            }
-
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun hasLocationPermission(): Boolean {
-
-        val fine =
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-
-        val coarse =
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-
-        return fine || coarse
-    }
-
-    private fun hasBackgroundLocationPermission(): Boolean {
-
-        if (Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.Q
-        ) {
-            return true
-        }
-
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun hasNotificationPermission(): Boolean {
-
-        if (
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.TIRAMISU
-        ) {
-            return true
-        }
-
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun requestLocationPermission() {
-
-        if (hasLocationPermission()) {
-
+        statusText.setTextColor(
             if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.Q &&
-                !hasBackgroundLocationPermission()
+                lower.contains("tracking") ||
+                lower.contains("gps on")
             ) {
-
-                showBackgroundLocationPermissionHint()
+                Color.parseColor(TIFFANY)
+            } else {
+                Color.LTGRAY
             }
-
-            return
-        }
-
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ),
-            REQUEST_LOCATION
         )
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
+    private fun isLocationEnabled(): Boolean {
 
-        if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.TIRAMISU &&
-            !hasNotificationPermission()
-        ) {
+        val manager =
+            getSystemService(
+                Context.LOCATION_SERVICE
+            ) as android.location.LocationManager
 
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(
-                    Manifest.permission.POST_NOTIFICATIONS
-                ),
-                REQUEST_NOTIFICATIONS
-            )
+        return try {
+
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.P
+            ) {
+
+                manager.isLocationEnabled
+
+            } else {
+
+                manager.isProviderEnabled(
+                    android.location.LocationManager.GPS_PROVIDER
+                ) ||
+                    manager.isProviderEnabled(
+                        android.location.LocationManager.NETWORK_PROVIDER
+                    )
+            }
+
+        } catch (_: Exception) {
+
+            false
         }
     }
 
-    private fun showBackgroundLocationPermissionHint() {
+    private fun refreshData() {
+
+        totalText.text =
+            "%.2f km".format(
+                database.getTotalOdometer()
+            )
+
+        todayText.text =
+            "%.2f km".format(
+                database.getTodayDistance()
+            )
+
+        val trip =
+            database.getLastCompletedTrip()
+
+        if (trip == null) {
+
+            lastTripText.text =
+                "No trips yet"
+
+            averageText.text =
+                "0.0 km/h"
+
+            maxText.text =
+                "0.0 km/h"
+
+        } else {
+
+            lastTripText.text =
+                "%.2f km".format(
+                    trip.distanceKm
+                )
+
+            averageText.text =
+                "%.1f km/h".format(
+                    trip.averageSpeed
+                )
+
+            maxText.text =
+                "%.1f km/h".format(
+                    trip.maxSpeed
+                )
+        }
+
+        val fuel =
+            database.getCurrentFuel()
+
+        fuelText.text =
+            "%.2f L / %.2f L".format(
+                fuel,
+                database.getTankCapacity()
+            )
+
+        val mileage =
+            database.getAverageMileage()
+
+        mileageText.text =
+            if (mileage > 0) {
+                "Mileage: %.2f km/L".format(
+                    mileage
+                )
+            } else {
+                "Mileage: --"
+            }
+
+        val overallRange =
+            database.getOverallRange()
+
+        rangeText.text =
+            if (mileage > 0) {
+                "Overall range: %.1f km".format(
+                    overallRange
+                )
+            } else {
+                "Overall range: --"
+            }
+
+        val reserveRange =
+            database.getRangeToReserve()
+
+        reserveRangeText.text =
+            if (mileage > 0) {
+                "Range until reserve: %.1f km".format(
+                    reserveRange
+                )
+            } else {
+                "Range until reserve: --"
+            }
+
+        val reached =
+            database.isReserveReached()
+
+        reserveReachedButton.background =
+            statusButtonBackground(
+                reached
+            )
+
+        reserveReachedButton.setTextColor(
+            if (reached) {
+                Color.WHITE
+            } else {
+                Color.GRAY
+            }
+        )
+
+        val crossed =
+            database.isReserveCrossed()
+
+        reserveCrossedButton.background =
+            statusButtonBackground(
+                crossed
+            )
+
+        reserveCrossedButton.setTextColor(
+            if (crossed) {
+                Color.WHITE
+            } else {
+                Color.GRAY
+            }
+        )
+    }
+
+    private fun showBackgroundLocationHintOnce() {
 
         if (
             Build.VERSION.SDK_INT <
             Build.VERSION_CODES.Q
+        ) {
+            return
+        }
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) ==
+            PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
@@ -1673,22 +1307,141 @@ class MainActivity : Activity() {
 
         AlertDialog.Builder(this)
             .setTitle(
-                "BACKGROUND LOCATION"
+                "Background location"
             )
             .setMessage(
-                "For reliable background tracking while the app is not open, Android may require Background Location permission. You can enable it from App permissions."
+                "For the strongest automatic tracking support, " +
+                    "including restarting after a phone reboot, " +
+                    "set Background Odometer location permission to " +
+                    "\"Allow all the time\" in Android settings."
             )
             .setNegativeButton(
                 "LATER",
                 null
             )
             .setPositiveButton(
-                "OPEN APP SETTINGS"
+                "OPEN SETTINGS"
             ) { _, _ ->
 
-                openAppSettings()
+                try {
+
+                    val intent =
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        )
+
+                    intent.data =
+                        Uri.parse(
+                            "package:$packageName"
+                        )
+
+                    startActivity(intent)
+
+                } catch (_: Exception) {
+                }
             }
             .show()
+    }
+
+    private fun notificationsAllowed(): Boolean {
+
+        return if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.TIRAMISU
+        ) {
+
+            NotificationManagerCompat
+                .from(this)
+                .areNotificationsEnabled()
+
+        } else {
+
+            true
+        }
+    }
+
+    private fun requestNotificationPermission() {
+
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.TIRAMISU
+        ) {
+
+            if (
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ),
+                    REQUEST_NOTIFICATIONS
+                )
+
+            } else {
+
+                openNotificationSettings()
+            }
+
+        } else {
+
+            openNotificationSettings()
+        }
+    }
+
+    private fun openNotificationSettings() {
+
+        try {
+
+            val intent =
+                Intent(
+                    Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                )
+
+            intent.putExtra(
+                Settings.EXTRA_APP_PACKAGE,
+                packageName
+            )
+
+            startActivity(intent)
+
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun requestLocationPermission() {
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                REQUEST_LOCATION
+            )
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean {
+
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     override fun onRequestPermissionsResult(
@@ -1703,102 +1456,20 @@ class MainActivity : Activity() {
             grantResults
         )
 
-        when (requestCode) {
+        if (
+            requestCode ==
+            REQUEST_NOTIFICATIONS
+        ) {
 
-            REQUEST_LOCATION -> {
-
-                if (hasLocationPermission()) {
-
-                    Toast.makeText(
-                        this,
-                        "Location permission granted",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    if (
-                        Build.VERSION.SDK_INT >=
-                        Build.VERSION_CODES.Q &&
-                        !hasBackgroundLocationPermission()
-                    ) {
-
-                        showBackgroundLocationPermissionHint()
-                    }
-
+            Toast.makeText(
+                this,
+                if (notificationsAllowed()) {
+                    "Notifications enabled."
                 } else {
-
-                    Toast.makeText(
-                        this,
-                        "Location permission is required",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-
-            REQUEST_NOTIFICATIONS -> {
-
-                if (!hasNotificationPermission()) {
-
-                    Toast.makeText(
-                        this,
-                        "Notifications are disabled. Background tracking may not work correctly.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-    }
-
-    private fun openAppSettings() {
-
-        try {
-
-            val intent =
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                )
-
-            intent.data =
-                Uri.parse(
-                    "package:$packageName"
-                )
-
-            startActivity(intent)
-
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun isLocationEnabled(): Boolean {
-
-        return try {
-
-            val manager =
-                getSystemService(
-                    Context.LOCATION_SERVICE
-                ) as android.location.LocationManager
-
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.P
-            ) {
-
-                manager.isLocationEnabled
-
-            } else {
-
-                @Suppress("DEPRECATION")
-                manager.isProviderEnabled(
-                    android.location.LocationManager.GPS_PROVIDER
-                ) ||
-                    @Suppress("DEPRECATION")
-                    manager.isProviderEnabled(
-                        android.location.LocationManager.NETWORK_PROVIDER
-                    )
-            }
-
-        } catch (_: Exception) {
-
-            false
+                    "Please allow notifications."
+                },
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -1806,26 +1477,14 @@ class MainActivity : Activity() {
         text: String
     ): TextView {
 
-        val view =
-            TextView(this)
+        return TextView(this).apply {
 
-        view.text =
-            text
-
-        view.textSize =
-            26f
-
-        view.typeface =
-            Typeface.DEFAULT_BOLD
-
-        view.setTextColor(
-            Color.WHITE
-        )
-
-        view.gravity =
-            Gravity.CENTER
-
-        return view
+            this.text = text
+            textSize = 25f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun createLabel(
@@ -1833,81 +1492,49 @@ class MainActivity : Activity() {
         color: String
     ): TextView {
 
-        val view =
-            TextView(this)
+        return TextView(this).apply {
 
-        view.text =
-            text
-
-        view.textSize =
-            14f
-
-        view.setTextColor(
-            Color.parseColor(color)
-        )
-
-        view.gravity =
-            Gravity.CENTER
-
-        return view
+            this.text = text
+            textSize = 15f
+            setTextColor(
+                Color.parseColor(color)
+            )
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun createLargeValue(
         text: String
     ): TextView {
 
-        val view =
-            TextView(this)
+        return TextView(this).apply {
 
-        view.text =
-            text
-
-        view.textSize =
-            42f
-
-        view.typeface =
-            Typeface.DEFAULT_BOLD
-
-        view.setTextColor(
-            Color.WHITE
-        )
-
-        view.gravity =
-            Gravity.CENTER
-
-        return view
+            this.text = text
+            textSize = 46f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun createMediumValue(
         text: String
     ): TextView {
 
-        val view =
-            TextView(this)
+        return TextView(this).apply {
 
-        view.text =
-            text
-
-        view.textSize =
-            25f
-
-        view.typeface =
-            Typeface.DEFAULT_BOLD
-
-        view.setTextColor(
-            Color.WHITE
-        )
-
-        view.gravity =
-            Gravity.CENTER
-
-        return view
+            this.text = text
+            textSize = 25f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun createStatColumn(
-        title: String,
+        label: String,
         value: String
-    ): Pair<View, TextView> {
+    ): Pair<LinearLayout, TextView> {
 
         val column =
             LinearLayout(this)
@@ -1918,33 +1545,27 @@ class MainActivity : Activity() {
         column.gravity =
             Gravity.CENTER
 
-        val label =
-            createLabel(
-                title,
-                "#888888"
-            )
-
-        val number =
-            createMediumValue(
-                value
-            )
-
-        number.textSize =
-            20f
-
         column.addView(
-            label,
+            createLabel(
+                label,
+                "#777777"
+            ),
             wrapParams()
         )
 
+        val valueView =
+            createMediumValue(value)
+
+        valueView.textSize = 20f
+
         column.addView(
-            number,
+            valueView,
             wrapParams()
         )
 
         return Pair(
             column,
-            number
+            valueView
         )
     }
 
@@ -1952,45 +1573,16 @@ class MainActivity : Activity() {
         text: String
     ): TextView {
 
-        val view =
-            TextView(this)
+        return TextView(this).apply {
 
-        view.text =
-            text
-
-        view.textSize =
-            15f
-
-        view.typeface =
-            Typeface.DEFAULT_BOLD
-
-        view.gravity =
-            Gravity.CENTER
-
-        view.setTextColor(
-            Color.WHITE
-        )
-
-        view.background =
-            roundedBackground(
-                Color.rgb(
-                    18,
-                    18,
-                    18
-                ),
-                Color.parseColor(
-                    TIFFANY
-                )
-            )
-
-        view.setPadding(
-            12,
-            8,
-            12,
-            8
-        )
-
-        return view
+            this.text = text
+            textSize = 17f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background =
+                buttonBackground(false)
+        }
     }
 
     private fun createStatusButton(
@@ -1998,39 +1590,72 @@ class MainActivity : Activity() {
         active: Boolean
     ): TextView {
 
-        val view =
-            createAction(text)
+        return TextView(this).apply {
 
-        if (!active) {
+            this.text = text
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
 
-            view.alpha =
-                0.75f
+            background =
+                statusButtonBackground(active)
         }
-
-        return view
     }
 
-    private fun roundedBackground(
-        fill: Int,
-        stroke: Int
+    private fun buttonBackground(
+        active: Boolean
     ): GradientDrawable {
 
-        val drawable =
-            GradientDrawable()
+        return GradientDrawable().apply {
 
-        drawable.setColor(
-            fill
-        )
+            cornerRadius = 18f
 
-        drawable.cornerRadius =
-            18f
+            setColor(
+                Color.parseColor(
+                    if (active) {
+                        "#07383E"
+                    } else {
+                        DARK
+                    }
+                )
+            )
 
-        drawable.setStroke(
-            2,
-            stroke
-        )
+            setStroke(
+                2,
+                Color.parseColor(TIFFANY)
+            )
+        }
+    }
 
-        return drawable
+    private fun statusButtonBackground(
+        active: Boolean
+    ): GradientDrawable {
+
+        return GradientDrawable().apply {
+
+            cornerRadius = 16f
+
+            setColor(
+                Color.parseColor(
+                    if (active) {
+                        "#07383E"
+                    } else {
+                        "#101010"
+                    }
+                )
+            )
+
+            setStroke(
+                2,
+                Color.parseColor(
+                    if (active) {
+                        TIFFANY
+                    } else {
+                        "#444444"
+                    }
+                )
+            )
+        }
     }
 
     private fun wrapParams():
@@ -2039,16 +1664,6 @@ class MainActivity : Activity() {
         return LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    }
-
-    private fun halfParams():
-        LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            0,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            1f
         )
     }
 
@@ -2062,26 +1677,92 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun halfParams():
+        LinearLayout.LayoutParams {
+
+        return LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        )
+    }
+
     private fun addSpace(
         parent: LinearLayout,
-        dp: Int
+        height: Int
     ) {
 
-        val space =
-            View(this)
-
-        val density =
-            resources.displayMetrics.density
-
-        val pixels =
-            (dp * density).toInt()
-
         parent.addView(
-            space,
+            View(this),
             LinearLayout.LayoutParams(
                 1,
-                pixels
+                height
             )
         )
+    }
+
+    override fun onResume() {
+
+        super.onResume()
+
+        val filter =
+            IntentFilter().apply {
+
+                addAction(
+                    LocationTrackingService.ACTION_SPEED_UPDATE
+                )
+
+                addAction(
+                    LocationTrackingService.ACTION_STATUS_UPDATE
+                )
+            }
+
+        ContextCompat.registerReceiver(
+            this,
+            serviceReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        trackingActive =
+            preferences.getBoolean(
+                PREF_AUTO_TRACKING,
+                false
+            )
+
+        trackingButton.text =
+            if (trackingActive) {
+                "STOP TRACKING"
+            } else {
+                "START TRACKING"
+            }
+
+        trackingButton.background =
+            buttonBackground(trackingActive)
+
+        if (trackingActive) {
+            updateStatusFromCurrentGps()
+        }
+
+        refreshData()
+    }
+
+    override fun onPause() {
+
+        try {
+            unregisterReceiver(
+                serviceReceiver
+            )
+        } catch (_: Exception) {
+        }
+
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+
+        database.close()
+
+        super.onDestroy()
     }
 }
