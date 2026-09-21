@@ -470,25 +470,16 @@ class RouteMapActivity : Activity() {
                         return@post
                     }
 
-                    val displayedDistance =
-                        if (
-                            trip.roadDistanceKm >
-                            0.0
-                        ) {
-
-                            trip.roadDistanceKm
-
-                        } else {
-
-                            trip.distanceKm
-                        }
-
                     distanceText.text =
-                        String.format(
-                            Locale.US,
-                            "ROAD DISTANCE: %.2f km",
-                            displayedDistance
-                        )
+                        if (trip.roadDistanceKm > 0.0) {
+                            String.format(
+                                Locale.US,
+                                "ROAD-MATCHED DISTANCE: %.2f km",
+                                trip.roadDistanceKm
+                            )
+                        } else {
+                            "ROAD-MATCHED DISTANCE: --"
+                        }
 
                     gpsDistanceText.text =
                         String.format(
@@ -497,19 +488,19 @@ class RouteMapActivity : Activity() {
                             trip.gpsDistanceKm
                         )
 
-                    if (
-                        rawPoints.isEmpty()
-                    ) {
-
+                    if (rawPoints.isEmpty()) {
                         statusText.text =
                             "NO GPS ROUTE RECORDED"
-
                         return@post
                     }
 
-                    val rawGeoPoints =
-                        rawPoints.map {
+                    val cleanedPoints =
+                        MapMatchingHelper.cleanRoutePoints(
+                            rawPoints
+                        )
 
+                    val cleanedGeoPoints =
+                        cleanedPoints.map {
                             GeoPoint(
                                 it.latitude,
                                 it.longitude
@@ -517,10 +508,12 @@ class RouteMapActivity : Activity() {
                         }
 
                     /*
-                     * GPS route always comes first.
+                     * The map shows a cleaned GPS route. The speed threshold
+                     * is NOT used to hide slow-moving route points; it only
+                     * controls odometer distance accumulation.
                      */
                     drawGpsRoute(
-                        rawGeoPoints
+                        cleanedGeoPoints
                     )
 
                     val cached =
@@ -534,6 +527,12 @@ class RouteMapActivity : Activity() {
                         cached != null &&
                         cached.points.size >= 2
                     ) {
+                        distanceText.text =
+                            String.format(
+                                Locale.US,
+                                "ROAD-MATCHED DISTANCE: %.2f km",
+                                cached.distanceMeters / 1000.0
+                            )
 
                         drawRoadRoute(
                             cached.points
@@ -592,11 +591,21 @@ class RouteMapActivity : Activity() {
                             } catch (_: Exception) {
                             }
 
+                            distanceText.text =
+                                String.format(
+                                    Locale.US,
+                                    "ROAD-MATCHED DISTANCE: %.2f km",
+                                    result.distanceMeters / 1000.0
+                                )
+
                             drawRoadRoute(
                                 result.points
                             )
 
                         } else {
+
+                            distanceText.text =
+                                "ROAD-MATCHED DISTANCE: --"
 
                             statusText.text =
                                 "GPS ROUTE SHOWN • ROAD MATCH UNAVAILABLE"
