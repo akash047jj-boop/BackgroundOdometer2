@@ -23,7 +23,9 @@ data class TripSummary(
     val gpsDistanceKm: Double = 0.0,
     val roadDistanceKm: Double = 0.0,
     val distanceSource: String = "GPS",
-    val matchingConfidence: Double = 0.0
+    val matchingConfidence: Double = 0.0,
+    val assignedDate: String = "",
+    val assignedPlace: String = ""
 )
 
 data class TrackPoint(
@@ -42,7 +44,8 @@ data class FuelRecord(
     val odometerKm: Double,
     val litresAdded: Double,
     val fuelAfterLitres: Double,
-    val note: String
+    val note: String,
+    val reserveCrossed: Boolean
 )
 
 class OdometerDatabaseHelper(
@@ -51,42 +54,25 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    4
+    5
 ) {
 
     companion object {
 
-        private const val TABLE_TRIPS =
-            "trips"
+        private const val TABLE_TRIPS = "trips"
+        private const val TABLE_POINTS = "track_points"
+        private const val TABLE_SETTINGS = "settings"
+        private const val TABLE_FUEL = "fuel_records"
 
-        private const val TABLE_POINTS =
-            "track_points"
+        private const val MAX_JUMP = 300.0
+        private const val MAX_TIME_GAP = 30.0
+        private const val MAX_SPEED = 180.0
 
-        private const val TABLE_SETTINGS =
-            "settings"
-
-        private const val TABLE_FUEL =
-            "fuel_records"
-
-        private const val MAX_JUMP =
-            300.0
-
-        private const val MAX_TIME_GAP =
-            30.0
-
-        private const val MAX_SPEED =
-            180.0
-
-        private const val DEFAULT_TANK_CAPACITY =
-            10.0
-
-        private const val DEFAULT_RESERVE =
-            1.0
+        private const val DEFAULT_TANK = 15.0
+        private const val DEFAULT_RESERVE = 3.2
     }
 
-    override fun onCreate(
-        db: SQLiteDatabase
-    ) {
+    override fun onCreate(db: SQLiteDatabase) {
 
         db.execSQL(
             """
@@ -101,7 +87,9 @@ class OdometerDatabaseHelper(
                 gps_distance_km REAL DEFAULT 0,
                 road_distance_km REAL DEFAULT 0,
                 distance_source TEXT DEFAULT 'GPS',
-                matching_confidence REAL DEFAULT 0
+                matching_confidence REAL DEFAULT 0,
+                assigned_date TEXT DEFAULT '',
+                assigned_place TEXT DEFAULT ''
             )
             """.trimIndent()
         )
@@ -137,7 +125,8 @@ class OdometerDatabaseHelper(
                 odometer_km REAL DEFAULT 0,
                 litres_added REAL DEFAULT 0,
                 fuel_after_litres REAL DEFAULT 0,
-                note TEXT DEFAULT ''
+                note TEXT DEFAULT '',
+                reserve_crossed INTEGER DEFAULT 0
             )
             """.trimIndent()
         )
@@ -151,7 +140,7 @@ class OdometerDatabaseHelper(
         setSetting(
             db,
             "tank_capacity",
-            DEFAULT_TANK_CAPACITY.toString()
+            DEFAULT_TANK.toString()
         )
 
         setSetting(
@@ -169,33 +158,29 @@ class OdometerDatabaseHelper(
 
         if (oldVersion < 2) {
 
-            db.execSQL(
-                """
-                ALTER TABLE trips
-                ADD COLUMN gps_distance_km REAL DEFAULT 0
-                """.trimIndent()
-            )
+            if (!columnExists(db, TABLE_TRIPS, "gps_distance_km")) {
+                db.execSQL(
+                    "ALTER TABLE trips ADD COLUMN gps_distance_km REAL DEFAULT 0"
+                )
+            }
 
-            db.execSQL(
-                """
-                ALTER TABLE trips
-                ADD COLUMN road_distance_km REAL DEFAULT 0
-                """.trimIndent()
-            )
+            if (!columnExists(db, TABLE_TRIPS, "road_distance_km")) {
+                db.execSQL(
+                    "ALTER TABLE trips ADD COLUMN road_distance_km REAL DEFAULT 0"
+                )
+            }
 
-            db.execSQL(
-                """
-                ALTER TABLE trips
-                ADD COLUMN distance_source TEXT DEFAULT 'GPS'
-                """.trimIndent()
-            )
+            if (!columnExists(db, TABLE_TRIPS, "distance_source")) {
+                db.execSQL(
+                    "ALTER TABLE trips ADD COLUMN distance_source TEXT DEFAULT 'GPS'"
+                )
+            }
 
-            db.execSQL(
-                """
-                ALTER TABLE trips
-                ADD COLUMN matching_confidence REAL DEFAULT 0
-                """.trimIndent()
-            )
+            if (!columnExists(db, TABLE_TRIPS, "matching_confidence")) {
+                db.execSQL(
+                    "ALTER TABLE trips ADD COLUMN matching_confidence REAL DEFAULT 0"
+                )
+            }
 
             db.execSQL(
                 """
@@ -207,37 +192,137 @@ class OdometerDatabaseHelper(
         }
 
         if (oldVersion < 3) {
-
             repairSuspiciousTrips(db)
         }
 
-        if (oldVersion < 4) {
+        if (!columnExists(db, TABLE_TRIPS, "assigned_date")) {
 
             db.execSQL(
                 """
-                CREATE TABLE IF NOT EXISTS fuel_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    time INTEGER NOT NULL,
-                    odometer_km REAL DEFAULT 0,
-                    litres_added REAL DEFAULT 0,
-                    fuel_after_litres REAL DEFAULT 0,
-                    note TEXT DEFAULT ''
-                )
+                ALTER TABLE trips
+                ADD COLUMN assigned_date TEXT DEFAULT ''
                 """.trimIndent()
             )
+        }
 
-            setSetting(
-                db,
-                "tank_capacity",
-                DEFAULT_TANK_CAPACITY.toString()
-            )
+        if (!columnExists(db, TABLE_TRIPS, "assigned_place")) {
 
-            setSetting(
-                db,
-                "reserve_fuel",
-                DEFAULT_RESERVE.toString()
+            db.execSQL(
+                """
+                ALTER TABLE trips
+                ADD COLUMN assigned_place TEXT DEFAULT ''
+                """.trimIndent()
             )
         }
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS fuel_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                time INTEGER NOT NULL,
+                odometer_km REAL DEFAULT 0,
+                litres_added REAL DEFAULT 0,
+                fuel_after_litres REAL DEFAULT 0,
+                note TEXT DEFAULT '',
+                reserve_crossed INTEGER DEFAULT 0
+            )
+            """.trimIndent()
+        )
+
+        if (
+            !columnExists(
+                db,
+                TABLE_FUEL,
+                "reserve_crossed"
+            )
+        ) {
+
+            db.execSQL(
+                """
+                ALTER TABLE fuel_records
+                ADD COLUMN reserve_crossed INTEGER DEFAULT 0
+                """.trimIndent()
+            )
+        }
+
+        setSettingIfMissing(
+            db,
+            "speed_threshold",
+            "6.0"
+        )
+
+        setSettingIfMissing(
+            db,
+            "tank_capacity",
+            DEFAULT_TANK.toString()
+        )
+
+        setSettingIfMissing(
+            db,
+            "reserve_fuel",
+            DEFAULT_RESERVE.toString()
+        )
+    }
+
+    private fun columnExists(
+        db: SQLiteDatabase,
+        table: String,
+        column: String
+    ): Boolean {
+
+        val cursor =
+            db.rawQuery(
+                "PRAGMA table_info($table)",
+                null
+            )
+
+        cursor.use {
+
+            while (it.moveToNext()) {
+
+                if (
+                    it.getString(1)
+                        .equals(
+                            column,
+                            ignoreCase = true
+                        )
+                ) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private fun setSettingIfMissing(
+        db: SQLiteDatabase,
+        key: String,
+        value: String
+    ) {
+
+        val cursor =
+            db.rawQuery(
+                """
+                SELECT value
+                FROM settings
+                WHERE key = ?
+                """,
+                arrayOf(key)
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+                return
+            }
+        }
+
+        setSetting(
+            db,
+            key,
+            value
+        )
     }
 
     private fun repairSuspiciousTrips(
@@ -252,9 +337,7 @@ class OdometerDatabaseHelper(
             val cursor =
                 db.rawQuery(
                     """
-                    SELECT
-                        id,
-                        distance_km
+                    SELECT id, distance_km
                     FROM trips
                     WHERE completed = 1
                     """,
@@ -320,9 +403,7 @@ class OdometerDatabaseHelper(
                             TABLE_TRIPS,
                             values,
                             "id = ?",
-                            arrayOf(
-                                id.toString()
-                            )
+                            arrayOf(id.toString())
                         )
                     }
                 }
@@ -343,9 +424,7 @@ class OdometerDatabaseHelper(
                 FROM settings
                 WHERE key = ?
                 """,
-                arrayOf(
-                    "speed_threshold"
-                )
+                arrayOf("speed_threshold")
             )
 
         cursor.use {
@@ -370,21 +449,38 @@ class OdometerDatabaseHelper(
         val values =
             ContentValues()
 
-        values.put(
-            "key",
-            key
-        )
-
-        values.put(
-            "value",
-            value
-        )
+        values.put("key", key)
+        values.put("value", value)
 
         db.insertWithOnConflict(
             TABLE_SETTINGS,
             null,
             values,
             SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    fun getSpeedThreshold(): Double {
+
+        return getSetting(
+            "speed_threshold",
+            6.0
+        )
+    }
+
+    fun getTankCapacity(): Double {
+
+        return getSetting(
+            "tank_capacity",
+            DEFAULT_TANK
+        )
+    }
+
+    fun getReserveFuel(): Double {
+
+        return getSetting(
+            "reserve_fuel",
+            DEFAULT_RESERVE
         )
     }
 
@@ -416,62 +512,21 @@ class OdometerDatabaseHelper(
         return defaultValue
     }
 
-    private fun saveSetting(
-        key: String,
-        value: Double
+    fun setFuelSettings(
+        tankCapacity: Double,
+        reserveFuel: Double
     ) {
 
         setSetting(
             writableDatabase,
-            key,
-            value.toString()
-        )
-    }
-
-    fun getSpeedThreshold():
-        Double {
-
-        return getSetting(
-            "speed_threshold",
-            6.0
-        )
-    }
-
-    fun getTankCapacity():
-        Double {
-
-        return getSetting(
             "tank_capacity",
-            DEFAULT_TANK_CAPACITY
+            tankCapacity.toString()
         )
-    }
 
-    fun setTankCapacity(
-        litres: Double
-    ) {
-
-        saveSetting(
-            "tank_capacity",
-            litres.coerceAtLeast(0.1)
-        )
-    }
-
-    fun getReserveFuel():
-        Double {
-
-        return getSetting(
+        setSetting(
+            writableDatabase,
             "reserve_fuel",
-            DEFAULT_RESERVE
-        )
-    }
-
-    fun setReserveFuel(
-        litres: Double
-    ) {
-
-        saveSetting(
-            "reserve_fuel",
-            litres.coerceAtLeast(0.0)
+            reserveFuel.toString()
         )
     }
 
@@ -482,45 +537,16 @@ class OdometerDatabaseHelper(
         val values =
             ContentValues()
 
-        values.put(
-            "start_time",
-            startTime
-        )
-
-        values.put(
-            "end_time",
-            0
-        )
-
-        values.put(
-            "completed",
-            0
-        )
-
-        values.put(
-            "distance_km",
-            0.0
-        )
-
-        values.put(
-            "gps_distance_km",
-            0.0
-        )
-
-        values.put(
-            "road_distance_km",
-            0.0
-        )
-
-        values.put(
-            "distance_source",
-            "GPS"
-        )
-
-        values.put(
-            "matching_confidence",
-            0.0
-        )
+        values.put("start_time", startTime)
+        values.put("end_time", 0)
+        values.put("completed", 0)
+        values.put("distance_km", 0.0)
+        values.put("gps_distance_km", 0.0)
+        values.put("road_distance_km", 0.0)
+        values.put("distance_source", "GPS")
+        values.put("matching_confidence", 0.0)
+        values.put("assigned_date", "")
+        values.put("assigned_place", "")
 
         return writableDatabase.insert(
             TABLE_TRIPS,
@@ -529,8 +555,7 @@ class OdometerDatabaseHelper(
         )
     }
 
-    fun getActiveTrip():
-        TripSummary? {
+    fun getActiveTrip(): TripSummary? {
 
         val cursor =
             readableDatabase.rawQuery(
@@ -547,7 +572,6 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -567,35 +591,12 @@ class OdometerDatabaseHelper(
         val values =
             ContentValues()
 
-        values.put(
-            "trip_id",
-            tripId
-        )
-
-        values.put(
-            "latitude",
-            latitude
-        )
-
-        values.put(
-            "longitude",
-            longitude
-        )
-
-        values.put(
-            "time",
-            time
-        )
-
-        values.put(
-            "speed_kmh",
-            speedKmh
-        )
-
-        values.put(
-            "accuracy",
-            accuracy
-        )
+        values.put("trip_id", tripId)
+        values.put("latitude", latitude)
+        values.put("longitude", longitude)
+        values.put("time", time)
+        values.put("speed_kmh", speedKmh)
+        values.put("accuracy", accuracy)
 
         writableDatabase.insert(
             TABLE_POINTS,
@@ -626,9 +627,7 @@ class OdometerDatabaseHelper(
                 WHERE trip_id = ?
                 ORDER BY time ASC
                 """,
-                arrayOf(
-                    tripId.toString()
-                )
+                arrayOf(tripId.toString())
             )
 
         cursor.use {
@@ -637,13 +636,13 @@ class OdometerDatabaseHelper(
 
                 result.add(
                     TrackPoint(
-                        id = it.getLong(0),
-                        tripId = it.getLong(1),
-                        latitude = it.getDouble(2),
-                        longitude = it.getDouble(3),
-                        time = it.getLong(4),
-                        speedKmh = it.getDouble(5),
-                        accuracy = it.getDouble(6)
+                        it.getLong(0),
+                        it.getLong(1),
+                        it.getDouble(2),
+                        it.getDouble(3),
+                        it.getLong(4),
+                        it.getDouble(5),
+                        it.getDouble(6)
                     )
                 )
             }
@@ -662,28 +661,15 @@ class OdometerDatabaseHelper(
         val values =
             ContentValues()
 
-        values.put(
-            "average_speed",
-            averageSpeed
-        )
-
-        values.put(
-            "max_speed",
-            maxSpeed
-        )
-
-        values.put(
-            "end_time",
-            lastTime
-        )
+        values.put("average_speed", averageSpeed)
+        values.put("max_speed", maxSpeed)
+        values.put("end_time", lastTime)
 
         writableDatabase.update(
             TABLE_TRIPS,
             values,
             "id = ?",
-            arrayOf(
-                tripId.toString()
-            )
+            arrayOf(tripId.toString())
         )
     }
 
@@ -695,13 +681,13 @@ class OdometerDatabaseHelper(
     ) {
 
         completeTripWithDistances(
-            tripId = tripId,
-            gpsDistanceKm = distanceKm,
-            roadDistanceKm = 0.0,
-            finalDistanceKm = distanceKm,
-            distanceSource = "GPS",
-            confidence = 0.0,
-            endTime = endTime
+            tripId,
+            distanceKm,
+            0.0,
+            distanceKm,
+            "GPS",
+            0.0,
+            endTime
         )
     }
 
@@ -757,9 +743,7 @@ class OdometerDatabaseHelper(
             TABLE_TRIPS,
             values,
             "id = ?",
-            arrayOf(
-                tripId.toString()
-            )
+            arrayOf(tripId.toString())
         )
     }
 
@@ -799,9 +783,7 @@ class OdometerDatabaseHelper(
                 WHERE trip_id = ?
                 ORDER BY time ASC
                 """,
-                arrayOf(
-                    tripId.toString()
-                )
+                arrayOf(tripId.toString())
             )
 
         cursor.use {
@@ -810,40 +792,29 @@ class OdometerDatabaseHelper(
 
                 points.add(
                     TrackPoint(
-                        id = it.getLong(0),
-                        tripId = it.getLong(1),
-                        latitude = it.getDouble(2),
-                        longitude = it.getDouble(3),
-                        time = it.getLong(4),
-                        speedKmh = it.getDouble(5),
-                        accuracy = it.getDouble(6)
+                        it.getLong(0),
+                        it.getLong(1),
+                        it.getDouble(2),
+                        it.getDouble(3),
+                        it.getLong(4),
+                        it.getDouble(5),
+                        it.getDouble(6)
                     )
                 )
             }
         }
 
-        if (
-            points.size < 2
-        ) {
-
+        if (points.size < 2) {
             return 0.0
         }
 
-        var coordinateMeters =
-            0.0
+        var coordinateMeters = 0.0
+        var speedMeters = 0.0
 
-        var speedMeters =
-            0.0
+        for (i in 1 until points.size) {
 
-        for (
-            i in 1 until points.size
-        ) {
-
-            val previous =
-                points[i - 1]
-
-            val current =
-                points[i]
+            val previous = points[i - 1]
+            val current = points[i]
 
             val seconds =
                 (
@@ -855,7 +826,6 @@ class OdometerDatabaseHelper(
                 seconds <= 0.0 ||
                 seconds > MAX_TIME_GAP
             ) {
-
                 continue
             }
 
@@ -867,16 +837,12 @@ class OdometerDatabaseHelper(
                     current.longitude
                 )
 
-            if (
-                coordinateDistance <=
-                MAX_JUMP
-            ) {
+            if (coordinateDistance <= MAX_JUMP) {
 
                 val impliedSpeed =
-                    (
-                        coordinateDistance /
-                            seconds
-                        ) * 3.6
+                    coordinateDistance /
+                        seconds *
+                        3.6
 
                 val moving =
                     current.speedKmh >= threshold ||
@@ -898,7 +864,6 @@ class OdometerDatabaseHelper(
                         current.speedKmh >= threshold ||
                         previous.speedKmh >= threshold
                     ) {
-
                         coordinateMeters +=
                             coordinateDistance
                     }
@@ -917,10 +882,9 @@ class OdometerDatabaseHelper(
             ) {
 
                 speedMeters +=
-                    (
-                        averageSpeed /
-                            3.6
-                        ) * seconds
+                    averageSpeed /
+                        3.6 *
+                        seconds
             }
         }
 
@@ -932,14 +896,10 @@ class OdometerDatabaseHelper(
 
         return if (
             speedKm >= 1.0 &&
-            coordinateKm <
-            speedKm * 0.25
+            coordinateKm < speedKm * 0.25
         ) {
-
             speedKm
-
         } else {
-
             coordinateKm
         }
     }
@@ -956,28 +916,18 @@ class OdometerDatabaseHelper(
         val values =
             ContentValues()
 
-        values.put(
-            "completed",
-            1
-        )
-
-        values.put(
-            "distance_source",
-            "GPS"
-        )
+        values.put("completed", 1)
+        values.put("distance_source", "GPS")
 
         writableDatabase.update(
             TABLE_TRIPS,
             values,
             "id = ?",
-            arrayOf(
-                tripId.toString()
-            )
+            arrayOf(tripId.toString())
         )
     }
 
-    fun getAllTrips():
-        List<TripSummary> {
+    fun getAllTrips(): List<TripSummary> {
 
         val result =
             mutableListOf<TripSummary>()
@@ -987,19 +937,14 @@ class OdometerDatabaseHelper(
                 tripSelectSql(
                     "completed = 1"
                 ) +
-                    """
-                    ORDER BY start_time DESC
-                    """,
+                    " ORDER BY start_time DESC",
                 null
             )
 
         cursor.use {
 
             while (it.moveToNext()) {
-
-                result.add(
-                    cursorToTrip(it)
-                )
+                result.add(cursorToTrip(it))
             }
         }
 
@@ -1012,18 +957,13 @@ class OdometerDatabaseHelper(
 
         val cursor =
             readableDatabase.rawQuery(
-                tripSelectSql(
-                    "id = ?"
-                ),
-                arrayOf(
-                    tripId.toString()
-                )
+                tripSelectSql("id = ?"),
+                arrayOf(tripId.toString())
             )
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -1031,8 +971,7 @@ class OdometerDatabaseHelper(
         return null
     }
 
-    fun getLastCompletedTrip():
-        TripSummary? {
+    fun getLastCompletedTrip(): TripSummary? {
 
         val cursor =
             readableDatabase.rawQuery(
@@ -1049,7 +988,6 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -1057,8 +995,7 @@ class OdometerDatabaseHelper(
         return null
     }
 
-    fun getTotalOdometer():
-        Double {
+    fun getTotalOdometer(): Double {
 
         val cursor =
             readableDatabase.rawQuery(
@@ -1076,7 +1013,6 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return it.getDouble(0)
             }
         }
@@ -1084,19 +1020,13 @@ class OdometerDatabaseHelper(
         return 0.0
     }
 
-    fun getTodayDistance():
-        Double {
+    fun getTodayDistance(): Double {
 
-        val format =
+        val today =
             SimpleDateFormat(
                 "yyyy-MM-dd",
                 Locale.getDefault()
-            )
-
-        val today =
-            format.format(
-                Date()
-            )
+            ).format(Date())
 
         val cursor =
             readableDatabase.rawQuery(
@@ -1113,15 +1043,12 @@ class OdometerDatabaseHelper(
                     'localtime'
                 ) = ?
                 """,
-                arrayOf(
-                    today
-                )
+                arrayOf(today)
             )
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return it.getDouble(0)
             }
         }
@@ -1129,65 +1056,211 @@ class OdometerDatabaseHelper(
         return 0.0
     }
 
-    /*
-     * --------------------------------------------------
-     * FUEL FUNCTIONS
-     * --------------------------------------------------
-     */
+    fun assignTripsToDay(
+        tripIds: List<Long>,
+        date: String,
+        place: String
+    ) {
 
-    fun addFuelRecord(
-        litresAdded: Double,
-        note: String = ""
-    ): FuelRecord? {
+        val db =
+            writableDatabase
 
-        if (
-            litresAdded <= 0.0
-        ) {
+        db.beginTransaction()
 
-            return null
+        try {
+
+            val values =
+                ContentValues()
+
+            values.put(
+                "assigned_date",
+                date
+            )
+
+            values.put(
+                "assigned_place",
+                place
+            )
+
+            for (id in tripIds) {
+
+                db.update(
+                    TABLE_TRIPS,
+                    values,
+                    "id = ?",
+                    arrayOf(id.toString())
+                )
+            }
+
+            db.setTransactionSuccessful()
+
+        } finally {
+
+            db.endTransaction()
+        }
+    }
+
+    fun getAssignedDates(): List<String> {
+
+        val result =
+            mutableListOf<String>()
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT DISTINCT assigned_date
+                FROM trips
+                WHERE completed = 1
+                AND assigned_date != ''
+                ORDER BY assigned_date DESC
+                """,
+                null
+            )
+
+        cursor.use {
+
+            while (it.moveToNext()) {
+                result.add(it.getString(0))
+            }
         }
 
-        val now =
-            System.currentTimeMillis()
+        return result
+    }
 
-        val odometer =
-            getTotalOdometer()
+    fun getTripsForDay(
+        date: String
+    ): List<TripSummary> {
 
-        val previousFuel =
+        val result =
+            mutableListOf<TripSummary>()
+
+        val cursor =
+            readableDatabase.rawQuery(
+                tripSelectSql(
+                    "completed = 1 AND assigned_date = ?"
+                ) +
+                    " ORDER BY start_time ASC",
+                arrayOf(date)
+            )
+
+        cursor.use {
+
+            while (it.moveToNext()) {
+                result.add(cursorToTrip(it))
+            }
+        }
+
+        return result
+    }
+
+    fun getDayDistance(
+        date: String
+    ): Double {
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT COALESCE(
+                    SUM(distance_km),
+                    0
+                )
+                FROM trips
+                WHERE completed = 1
+                AND assigned_date = ?
+                """,
+                arrayOf(date)
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+                return it.getDouble(0)
+            }
+        }
+
+        return 0.0
+    }
+
+    fun getDayFuel(
+        date: String
+    ): Double {
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT COALESCE(
+                    SUM(litres_added),
+                    0
+                )
+                FROM fuel_records
+                WHERE date(
+                    time / 1000,
+                    'unixepoch',
+                    'localtime'
+                ) = ?
+                """,
+                arrayOf(date)
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+                return it.getDouble(0)
+            }
+        }
+
+        return 0.0
+    }
+
+    fun addFuel(
+        litres: Double,
+        note: String
+    ): Boolean {
+
+        if (litres <= 0.0) {
+            return false
+        }
+
+        val before =
             getCurrentFuel()
 
-        val tankCapacity =
+        val capacity =
             getTankCapacity()
 
-        val fuelAfter =
-            (
-                previousFuel +
-                    litresAdded
-                ).coerceAtMost(
-                    tankCapacity
-                )
+        val after =
+            minOf(
+                capacity,
+                before + litres
+            )
+
+        val reserve =
+            getReserveFuel()
+
+        val crossed =
+            before <= reserve &&
+                after > reserve
 
         val values =
             ContentValues()
 
         values.put(
             "time",
-            now
+            System.currentTimeMillis()
         )
 
         values.put(
             "odometer_km",
-            odometer
+            getTotalOdometer()
         )
 
         values.put(
             "litres_added",
-            litresAdded
+            litres
         )
 
         values.put(
             "fuel_after_litres",
-            fuelAfter
+            after
         )
 
         values.put(
@@ -1195,128 +1268,23 @@ class OdometerDatabaseHelper(
             note
         )
 
-        val id =
-            writableDatabase.insert(
-                TABLE_FUEL,
-                null,
-                values
-            )
-
-        if (
-            id <= 0L
-        ) {
-
-            return null
-        }
-
-        return FuelRecord(
-            id = id,
-            time = now,
-            odometerKm = odometer,
-            litresAdded = litresAdded,
-            fuelAfterLitres = fuelAfter,
-            note = note
+        values.put(
+            "reserve_crossed",
+            if (crossed) 1 else 0
         )
+
+        writableDatabase.insert(
+            TABLE_FUEL,
+            null,
+            values
+        )
+
+        clearOlderReserveCrossed()
+
+        return true
     }
 
-    fun updateFuelRecord(
-        id: Long,
-        litresAdded: Double,
-        note: String
-    ): Boolean {
-
-        if (
-            litresAdded <= 0.0
-        ) {
-
-            return false
-        }
-
-        val record =
-            getFuelRecord(id)
-                ?: return false
-
-        val all =
-            getFuelRecords()
-
-        val previous =
-            all.filter {
-                it.id != id &&
-                    it.time < record.time
-            }.maxByOrNull {
-                it.time
-            }
-
-        val previousFuel =
-            if (previous == null) {
-
-                0.0
-
-            } else {
-
-                previous.fuelAfterLitres
-            }
-
-        val tankCapacity =
-            getTankCapacity()
-
-        val newFuelAfter =
-            (
-                previousFuel +
-                    litresAdded
-                ).coerceAtMost(
-                    tankCapacity
-                )
-
-        val values =
-            ContentValues()
-
-        values.put(
-            "litres_added",
-            litresAdded
-        )
-
-        values.put(
-            "fuel_after_litres",
-            newFuelAfter
-        )
-
-        values.put(
-            "note",
-            note
-        )
-
-        val rows =
-            writableDatabase.update(
-                TABLE_FUEL,
-                values,
-                "id = ?",
-                arrayOf(
-                    id.toString()
-                )
-            )
-
-        return rows > 0
-    }
-
-    fun deleteFuelRecord(
-        id: Long
-    ): Boolean {
-
-        val rows =
-            writableDatabase.delete(
-                TABLE_FUEL,
-                "id = ?",
-                arrayOf(
-                    id.toString()
-                )
-            )
-
-        return rows > 0
-    }
-
-    fun getFuelRecords():
-        List<FuelRecord> {
+    fun getFuelRecords(): List<FuelRecord> {
 
         val result =
             mutableListOf<FuelRecord>()
@@ -1330,7 +1298,8 @@ class OdometerDatabaseHelper(
                     odometer_km,
                     litres_added,
                     fuel_after_litres,
-                    note
+                    note,
+                    reserve_crossed
                 FROM fuel_records
                 ORDER BY time DESC
                 """,
@@ -1343,12 +1312,13 @@ class OdometerDatabaseHelper(
 
                 result.add(
                     FuelRecord(
-                        id = it.getLong(0),
-                        time = it.getLong(1),
-                        odometerKm = it.getDouble(2),
-                        litresAdded = it.getDouble(3),
-                        fuelAfterLitres = it.getDouble(4),
-                        note = it.getString(5) ?: ""
+                        it.getLong(0),
+                        it.getLong(1),
+                        it.getDouble(2),
+                        it.getDouble(3),
+                        it.getDouble(4),
+                        it.getString(5) ?: "",
+                        it.getInt(6) != 0
                     )
                 )
             }
@@ -1357,59 +1327,156 @@ class OdometerDatabaseHelper(
         return result
     }
 
-    fun getFuelRecord(
-        id: Long
-    ): FuelRecord? {
+    fun updateFuel(
+        id: Long,
+        litres: Double,
+        note: String
+    ): Boolean {
+
+        if (litres <= 0.0) {
+            return false
+        }
 
         val cursor =
             readableDatabase.rawQuery(
                 """
-                SELECT
-                    id,
-                    time,
-                    odometer_km,
-                    litres_added,
-                    fuel_after_litres,
-                    note
+                SELECT litres_added
                 FROM fuel_records
                 WHERE id = ?
                 """,
-                arrayOf(
-                    id.toString()
-                )
+                arrayOf(id.toString())
             )
+
+        var oldLitres =
+            0.0
+
+        cursor.use {
+
+            if (!it.moveToFirst()) {
+                return false
+            }
+
+            oldLitres =
+                it.getDouble(0)
+        }
+
+        val delta =
+            litres - oldLitres
+
+        val values =
+            ContentValues()
+
+        values.put(
+            "litres_added",
+            litres
+        )
+
+        values.put(
+            "note",
+            note
+        )
+
+        writableDatabase.update(
+            TABLE_FUEL,
+            values,
+            "id = ?",
+            arrayOf(id.toString())
+        )
+
+        adjustLaterFuelAmounts(
+            id,
+            delta
+        )
+
+        recalculateLatestReserveCrossed()
+
+        return true
+    }
+
+    fun deleteFuel(
+        id: Long
+    ) {
+
+        val cursor =
+            readableDatabase.rawQuery(
+                """
+                SELECT litres_added
+                FROM fuel_records
+                WHERE id = ?
+                """,
+                arrayOf(id.toString())
+            )
+
+        var litres =
+            0.0
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
-                return FuelRecord(
-                    id = it.getLong(0),
-                    time = it.getLong(1),
-                    odometerKm = it.getDouble(2),
-                    litresAdded = it.getDouble(3),
-                    fuelAfterLitres = it.getDouble(4),
-                    note = it.getString(5) ?: ""
-                )
+                litres = it.getDouble(0)
             }
         }
 
-        return null
+        writableDatabase.delete(
+            TABLE_FUEL,
+            "id = ?",
+            arrayOf(id.toString())
+        )
+
+        adjustLaterFuelAmounts(
+            id,
+            -litres
+        )
+
+        recalculateLatestReserveCrossed()
     }
 
-    fun getLastFuelRecord():
-        FuelRecord? {
+    private fun adjustLaterFuelAmounts(
+        id: Long,
+        delta: Double
+    ) {
 
-        val cursor =
+        val target =
             readableDatabase.rawQuery(
                 """
-                SELECT
-                    id,
-                    time,
-                    odometer_km,
-                    litres_added,
-                    fuel_after_litres,
-                    note
+                SELECT time
+                FROM fuel_records
+                WHERE id = ?
+                """,
+                arrayOf(id.toString())
+            )
+
+        var time =
+            Long.MAX_VALUE
+
+        target.use {
+
+            if (it.moveToFirst()) {
+                time = it.getLong(0)
+            }
+        }
+
+        if (time == Long.MAX_VALUE) {
+            return
+        }
+
+        writableDatabase.execSQL(
+            """
+            UPDATE fuel_records
+            SET fuel_after_litres =
+                fuel_after_litres + ?
+            WHERE time > ?
+            """,
+            arrayOf(delta, time)
+        )
+    }
+
+    private fun clearOlderReserveCrossed() {
+
+        val latest =
+            readableDatabase.rawQuery(
+                """
+                SELECT id
                 FROM fuel_records
                 ORDER BY time DESC
                 LIMIT 1
@@ -1417,94 +1484,160 @@ class OdometerDatabaseHelper(
                 null
             )
 
-        cursor.use {
+        var id =
+            -1L
+
+        latest.use {
 
             if (it.moveToFirst()) {
-
-                return FuelRecord(
-                    id = it.getLong(0),
-                    time = it.getLong(1),
-                    odometerKm = it.getDouble(2),
-                    litresAdded = it.getDouble(3),
-                    fuelAfterLitres = it.getDouble(4),
-                    note = it.getString(5) ?: ""
-                )
+                id = it.getLong(0)
             }
         }
 
-        return null
+        if (id <= 0) {
+            return
+        }
+
+        writableDatabase.execSQL(
+            """
+            UPDATE fuel_records
+            SET reserve_crossed =
+                CASE
+                    WHEN id = ? THEN reserve_crossed
+                    ELSE 0
+                END
+            """,
+            arrayOf(id)
+        )
     }
 
-    /*
-     * Estimated current fuel is calculated from
-     * the most recent fuel entry and the distance
-     * travelled since that entry.
-     */
-    fun getCurrentFuel():
-        Double {
+    private fun recalculateLatestReserveCrossed() {
 
-        val last =
-            getLastFuelRecord()
-                ?: return 0.0
+        val records =
+            getFuelRecords()
+
+        if (records.isEmpty()) {
+            return
+        }
+
+        writableDatabase.execSQL(
+            "UPDATE fuel_records SET reserve_crossed = 0"
+        )
+
+        val latest =
+            records.first()
+
+        val previous =
+            records.getOrNull(1)
+
+        if (previous == null) {
+            return
+        }
 
         val mileage =
             getAverageMileage()
 
-        if (
-            mileage <= 0.0
-        ) {
+        val fuelBefore =
+            if (mileage > 0.0) {
 
-            return last.fuelAfterLitres
+                maxOf(
+                    0.0,
+                    previous.fuelAfterLitres -
+                        (
+                            latest.odometerKm -
+                                previous.odometerKm
+                            ) / mileage
+                )
+
+            } else {
+
+                previous.fuelAfterLitres
+            }
+
+        val crossed =
+            fuelBefore <= getReserveFuel() &&
+                latest.fuelAfterLitres >
+                getReserveFuel()
+
+        if (crossed) {
+
+            val values =
+                ContentValues()
+
+            values.put(
+                "reserve_crossed",
+                1
+            )
+
+            writableDatabase.update(
+                TABLE_FUEL,
+                values,
+                "id = ?",
+                arrayOf(latest.id.toString())
+            )
         }
-
-        val currentOdometer =
-            getTotalOdometer()
-
-        val distance =
-            (
-                currentOdometer -
-                    last.odometerKm
-                ).coerceAtLeast(0.0)
-
-        val consumed =
-            distance / mileage
-
-        return (
-            last.fuelAfterLitres -
-                consumed
-            ).coerceAtLeast(0.0)
     }
 
-    /*
-     * Mileage is calculated from the distance between
-     * fuel events and the estimated fuel consumed
-     * before each subsequent refuelling.
-     */
-    fun getAverageMileage():
-        Double {
+    fun getCurrentFuel(): Double {
 
         val records =
             getFuelRecords()
-                .sortedBy {
-                    it.time
-                }
 
-        if (
-            records.size < 2
-        ) {
+        if (records.isEmpty()) {
+            return 0.0
+        }
 
+        val latest =
+            records.first()
+
+        val mileage =
+            getAverageMileage()
+
+        if (mileage <= 0.0) {
+
+            return latest.fuelAfterLitres
+                .coerceIn(
+                    0.0,
+                    getTankCapacity()
+                )
+        }
+
+        val distanceSinceFuel =
+            maxOf(
+                0.0,
+                getTotalOdometer() -
+                    latest.odometerKm
+            )
+
+        val consumed =
+            distanceSinceFuel / mileage
+
+        return (
+            latest.fuelAfterLitres -
+                consumed
+            ).coerceIn(
+                0.0,
+                getTankCapacity()
+            )
+    }
+
+    fun getAverageMileage(): Double {
+
+        val records =
+            getFuelRecords()
+                .sortedBy { it.time }
+
+        if (records.size < 2) {
             return 0.0
         }
 
         var totalDistance =
             0.0
 
-        var totalFuelConsumed =
+        var totalFuel =
             0.0
 
-        for (
-            i in 1 until records.size
-        ) {
+        for (i in 1 until records.size) {
 
             val previous =
                 records[i - 1]
@@ -1513,114 +1646,75 @@ class OdometerDatabaseHelper(
                 records[i]
 
             val distance =
-                (
-                    current.odometerKm -
-                        previous.odometerKm
-                    ).coerceAtLeast(0.0)
-
-            val fuelBeforeCurrent =
-                if (
-                    i == 0
-                ) {
-
-                    0.0
-
-                } else {
-
-                    current.fuelAfterLitres -
-                        current.litresAdded
-                }
-
-            val consumed =
-                (
-                    previous.fuelAfterLitres -
-                        fuelBeforeCurrent
-                    ).coerceAtLeast(0.0)
+                current.odometerKm -
+                    previous.odometerKm
 
             if (
                 distance > 0.0 &&
-                consumed > 0.05
+                current.litresAdded > 0.0
             ) {
 
                 totalDistance +=
                     distance
 
-                totalFuelConsumed +=
-                    consumed
+                totalFuel +=
+                    current.litresAdded
             }
         }
 
-        if (
-            totalFuelConsumed <= 0.0
+        return if (
+            totalFuel > 0.0
         ) {
-
-            return 0.0
+            totalDistance / totalFuel
+        } else {
+            0.0
         }
-
-        return totalDistance /
-            totalFuelConsumed
     }
 
-    fun getOverallRangeKm():
-        Double {
-
-        val fuel =
-            getCurrentFuel()
+    fun getOverallRange(): Double {
 
         val mileage =
             getAverageMileage()
 
-        if (
-            fuel <= 0.0 ||
-            mileage <= 0.0
-        ) {
-
-            return 0.0
+        return if (mileage > 0.0) {
+            getCurrentFuel() * mileage
+        } else {
+            0.0
         }
-
-        /*
-         * Reserve is INCLUDED here.
-         */
-        return fuel * mileage
     }
 
-    fun getRangeUntilReserveKm():
-        Double {
-
-        val fuel =
-            getCurrentFuel()
-
-        val reserve =
-            getReserveFuel()
+    fun getRangeToReserve(): Double {
 
         val mileage =
             getAverageMileage()
 
-        val usableBeforeReserve =
-            (
-                fuel -
-                    reserve
-                ).coerceAtLeast(0.0)
+        val available =
+            maxOf(
+                0.0,
+                getCurrentFuel() -
+                    getReserveFuel()
+            )
 
-        if (
-            mileage <= 0.0
-        ) {
-
-            return 0.0
+        return if (mileage > 0.0) {
+            available * mileage
+        } else {
+            0.0
         }
-
-        return usableBeforeReserve *
-            mileage
     }
 
-    fun isReserveReached():
-        Boolean {
+    fun isReserveReached(): Boolean {
 
-        val fuel =
-            getCurrentFuel()
-
-        return fuel <=
+        return getCurrentFuel() <=
             getReserveFuel()
+    }
+
+    fun isReserveCrossed(): Boolean {
+
+        val records =
+            getFuelRecords()
+
+        return records.firstOrNull()
+            ?.reserveCrossed == true
     }
 
     private fun tripSelectSql(
@@ -1638,7 +1732,9 @@ class OdometerDatabaseHelper(
                 gps_distance_km,
                 road_distance_km,
                 distance_source,
-                matching_confidence
+                matching_confidence,
+                assigned_date,
+                assigned_place
             FROM trips
             WHERE $where
         """.trimIndent()
@@ -1649,37 +1745,22 @@ class OdometerDatabaseHelper(
     ): TripSummary {
 
         return TripSummary(
-
-            id =
-                cursor.getLong(0),
-
-            startTime =
-                cursor.getLong(1),
-
-            endTime =
-                cursor.getLong(2),
-
-            distanceKm =
-                cursor.getDouble(3),
-
-            averageSpeed =
-                cursor.getDouble(4),
-
-            maxSpeed =
-                cursor.getDouble(5),
-
-            gpsDistanceKm =
-                cursor.getDouble(6),
-
-            roadDistanceKm =
-                cursor.getDouble(7),
-
+            id = cursor.getLong(0),
+            startTime = cursor.getLong(1),
+            endTime = cursor.getLong(2),
+            distanceKm = cursor.getDouble(3),
+            averageSpeed = cursor.getDouble(4),
+            maxSpeed = cursor.getDouble(5),
+            gpsDistanceKm = cursor.getDouble(6),
+            roadDistanceKm = cursor.getDouble(7),
             distanceSource =
-                cursor.getString(8)
-                    ?: "GPS",
-
+                cursor.getString(8) ?: "GPS",
             matchingConfidence =
-                cursor.getDouble(9)
+                cursor.getDouble(9),
+            assignedDate =
+                cursor.getString(10) ?: "",
+            assignedPlace =
+                cursor.getString(11) ?: ""
         )
     }
 
@@ -1690,29 +1771,22 @@ class OdometerDatabaseHelper(
         lon2Value: Double
     ): Double {
 
-        val earth =
-            6_371_000.0
+        val earth = 6_371_000.0
 
         val lat1 =
-            Math.toRadians(
-                lat1Value
-            )
+            Math.toRadians(lat1Value)
 
         val lat2 =
-            Math.toRadians(
-                lat2Value
-            )
+            Math.toRadians(lat2Value)
 
         val dLat =
             Math.toRadians(
-                lat2Value -
-                    lat1Value
+                lat2Value - lat1Value
             )
 
         val dLon =
             Math.toRadians(
-                lon2Value -
-                    lon1Value
+                lon2Value - lon1Value
             )
 
         val a =
@@ -1731,5 +1805,19 @@ class OdometerDatabaseHelper(
                 )
 
         return earth * c
+    }
+
+    override fun onOpen(
+        db: SQLiteDatabase
+    ) {
+
+        super.onOpen(db)
+
+        try {
+            db.execSQL(
+                "PRAGMA foreign_keys=ON"
+            )
+        } catch (_: Exception) {
+        }
     }
 }
