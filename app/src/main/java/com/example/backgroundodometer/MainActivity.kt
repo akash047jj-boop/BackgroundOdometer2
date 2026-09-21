@@ -193,7 +193,10 @@ class MainActivity : Activity() {
         addSpace(root, 20)
 
         root.addView(
-            createLabel("TODAY", "#888888"),
+            createLabel(
+                "TODAY",
+                "#888888"
+            ),
             wrapParams()
         )
 
@@ -1126,8 +1129,11 @@ class MainActivity : Activity() {
                 Build.VERSION.SDK_INT >=
                 Build.VERSION_CODES.P
             ) {
+
                 manager.isLocationEnabled
+
             } else {
+
                 manager.isProviderEnabled(
                     android.location.LocationManager.GPS_PROVIDER
                 ) ||
@@ -1137,6 +1143,7 @@ class MainActivity : Activity() {
             }
 
         } catch (_: Exception) {
+
             false
         }
     }
@@ -1259,7 +1266,8 @@ class MainActivity : Activity() {
                 Color.WHITE
             } else {
                 Color.GRAY
-            )
+            }
+        )
     }
 
     private fun showBackgroundLocationHintOnce() {
@@ -1341,10 +1349,13 @@ class MainActivity : Activity() {
             Build.VERSION.SDK_INT >=
             Build.VERSION_CODES.TIRAMISU
         ) {
+
             NotificationManagerCompat
                 .from(this)
                 .areNotificationsEnabled()
+
         } else {
+
             true
         }
     }
@@ -1371,11 +1382,14 @@ class MainActivity : Activity() {
                     ),
                     REQUEST_NOTIFICATIONS
                 )
+
             } else {
+
                 openNotificationSettings()
             }
 
         } else {
+
             openNotificationSettings()
         }
     }
@@ -1751,4 +1765,4 @@ class MainActivity : Activity() {
 
         super.onDestroy()
     }
-            }
+}
