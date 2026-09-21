@@ -20,6 +20,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -176,15 +178,21 @@ class MainActivity : Activity() {
         belowReserveButton.textSize = 14f
         fuelCard.addView(belowReserveButton, wrapParams())
         belowReserveButton.setOnClickListener {
-            if (!database.isReserveReached()) {
-                Toast.makeText(this, "Fuel is still above reserve.", Toast.LENGTH_SHORT).show()
+            if (database.hasCurrentBelowReserveMarker()) {
+                Toast.makeText(this, "Below-reserve point is already saved.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            val autoDetected = database.isReserveReachedByCalculation()
             if (database.markCurrentFuelBelowReserve()) {
-                Toast.makeText(this, "Below-reserve point saved for mileage calculation.", Toast.LENGTH_SHORT).show()
+                val message = if (autoDetected) {
+                    "Auto-detected below reserve confirmed and saved."
+                } else {
+                    "Manual below-reserve point saved for mileage calculation."
+                }
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
                 refreshData()
             } else {
-                Toast.makeText(this, "Below-reserve point is already saved.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Unable to save below-reserve point.", Toast.LENGTH_SHORT).show()
             }
         }
         root.addView(fuelCard, wrapParams())
@@ -265,6 +273,32 @@ class MainActivity : Activity() {
         litres.hint = "Litres added"
         litres.inputType = 2 or 8192
         layout.addView(litres, wrapParams())
+
+        val statusLabel = createLabel("FUEL STATUS AFTER REFUELLING", "#AAAAAA")
+        statusLabel.textSize = 13f
+        layout.addView(statusLabel, wrapParams())
+
+        val statusGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+        }
+        val aboveRadio = RadioButton(this).apply {
+            text = "ABOVE RESERVE"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            id = View.generateViewId()
+        }
+        val belowRadio = RadioButton(this).apply {
+            text = "BELOW RESERVE"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            id = View.generateViewId()
+        }
+        statusGroup.addView(aboveRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusGroup.addView(belowRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val currentBelow = database.isReserveReached()
+        statusGroup.check(if (currentBelow) belowRadio.id else aboveRadio.id)
+        layout.addView(statusGroup, wrapParams())
+
         val note = EditText(this)
         note.hint = "Note (optional)"
         layout.addView(note, wrapParams())
@@ -279,7 +313,8 @@ class MainActivity : Activity() {
                     Toast.makeText(this, "Enter valid litres", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                database.addFuel(amount, note.text.toString())
+                val status = if (statusGroup.checkedRadioButtonId == belowRadio.id) "BELOW" else "ABOVE"
+                database.addFuel(amount, note.text.toString(), status)
                 refreshData()
             }
             .show()
@@ -332,10 +367,11 @@ class MainActivity : Activity() {
             val date = java.text.SimpleDateFormat("dd MMM yyyy hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(record.time))
             val text = TextView(this)
             val isMarker = record.litresAdded <= 0.0 && record.fuelStatus == "BELOW"
+            val statusLine = if (record.fuelStatus == "BELOW") "BELOW RESERVE" else "ABOVE RESERVE"
             text.text = if (isMarker) {
                 "$date\nBELOW RESERVE MARKER • Odometer %.2f km\n%s".format(record.odometerKm, record.note)
             } else {
-                "$date\n+%.2f L • Fuel after %.2f L\n%s".format(record.litresAdded, record.fuelAfterLitres, record.note)
+                "$date\n+%.2f L • Fuel after %.2f L • %s\n%s".format(record.litresAdded, record.fuelAfterLitres, statusLine, record.note)
             }
             text.textSize = 15f
             text.setTextColor(Color.WHITE)
@@ -367,6 +403,22 @@ class MainActivity : Activity() {
         litres.setText(record.litresAdded.toString())
         litres.inputType = 2 or 8192
         layout.addView(litres, wrapParams())
+
+        val statusLabel = createLabel("FUEL STATUS AFTER REFUELLING", "#AAAAAA")
+        statusLabel.textSize = 13f
+        layout.addView(statusLabel, wrapParams())
+        val statusGroup = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        val aboveRadio = RadioButton(this).apply {
+            text = "ABOVE RESERVE"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
+        }
+        val belowRadio = RadioButton(this).apply {
+            text = "BELOW RESERVE"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
+        }
+        statusGroup.addView(aboveRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusGroup.addView(belowRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusGroup.check(if (record.fuelStatus == "BELOW") belowRadio.id else aboveRadio.id)
+        layout.addView(statusGroup, wrapParams())
+
         val note = EditText(this)
         note.setText(record.note)
         layout.addView(note, wrapParams())
@@ -375,7 +427,8 @@ class MainActivity : Activity() {
             .setPositiveButton("SAVE") { _, _ ->
                 val value = litres.text.toString().toDoubleOrNull()
                 if (value == null || value <= 0) return@setPositiveButton
-                database.updateFuel(record.id, value, note.text.toString())
+                val status = if (statusGroup.checkedRadioButtonId == belowRadio.id) "BELOW" else "ABOVE"
+                database.updateFuel(record.id, value, note.text.toString(), status)
                 refreshData()
             }.show()
     }
@@ -443,19 +496,33 @@ class MainActivity : Activity() {
         val mileage = database.getAverageMileage()
         rangeText.text = if (mileage > 0) "Range: %.1f km • Mileage: %.2f km/L".format(database.getOverallRange(), mileage) else "Range: -- • Mileage: --"
 
-        val below = database.isReserveReached()
-        val currentStatus = if (below) "BELOW RESERVE" else "ABOVE RESERVE"
+        val autoBelow = database.isReserveReachedByCalculation()
+        val userStatus = database.getCurrentFuelStatus()
+        val below = userStatus == "BELOW" || autoBelow
+        val currentStatus = when {
+            userStatus == "BELOW" -> "BELOW RESERVE"
+            autoBelow -> "BELOW RESERVE • AUTO DETECTED"
+            else -> "ABOVE RESERVE"
+        }
         reserveStatusText.text = currentStatus
         reserveStatusText.background = statusBackground(below)
         reserveStatusText.setTextColor(if (below) Color.WHITE else Color.parseColor(TIFFANY))
 
-        belowReserveButton.visibility = if (below) View.VISIBLE else View.GONE
-        belowReserveButton.text = if (database.hasCurrentBelowReserveMarker()) {
-            "BELOW RESERVE ✓ • MILEAGE POINT SAVED"
-        } else {
-            "BELOW RESERVE — TAP TO MARK"
+        belowReserveButton.visibility = View.VISIBLE
+        when {
+            database.hasCurrentBelowReserveMarker() -> {
+                belowReserveButton.text = "BELOW RESERVE ✓ • MILEAGE POINT SAVED"
+                belowReserveButton.isEnabled = false
+            }
+            autoBelow -> {
+                belowReserveButton.text = "BELOW RESERVE — AUTO-DETECTED • TAP TO CONFIRM"
+                belowReserveButton.isEnabled = true
+            }
+            else -> {
+                belowReserveButton.text = "MARK BELOW RESERVE MANUALLY"
+                belowReserveButton.isEnabled = true
+            }
         }
-        belowReserveButton.isEnabled = !database.hasCurrentBelowReserveMarker()
         belowReserveButton.alpha = if (belowReserveButton.isEnabled) 1f else 0.7f
     }
 
