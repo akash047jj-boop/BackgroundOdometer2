@@ -54,7 +54,7 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    5
+    6
 ) {
 
     companion object {
@@ -148,6 +148,11 @@ class OdometerDatabaseHelper(
             "reserve_fuel",
             DEFAULT_RESERVE.toString()
         )
+
+        setSetting(db, "odometer_display_offset", "0.0")
+        setSetting(db, "distance_alert_enabled", "0")
+        setSetting(db, "distance_alert_target", "0.0")
+        setSetting(db, "distance_alert_triggered", "0")
     }
 
     override fun onUpgrade(
@@ -262,9 +267,13 @@ class OdometerDatabaseHelper(
             "reserve_fuel",
             DEFAULT_RESERVE.toString()
         )
+        setSettingIfMissing(db, "odometer_display_offset", "0.0")
+        setSettingIfMissing(db, "distance_alert_enabled", "0")
+        setSettingIfMissing(db, "distance_alert_target", "0.0")
+        setSettingIfMissing(db, "distance_alert_triggered", "0")
     }
 
-    private fun columnExists(
+   private fun columnExists(
         db: SQLiteDatabase,
         table: String,
         column: String
@@ -1013,11 +1022,11 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-                return it.getDouble(0)
+                return maxOf(0.0, it.getDouble(0) + getDisplayedOdometerOffset())
             }
         }
 
-        return 0.0
+        return maxOf(0.0, getDisplayedOdometerOffset())
     }
 
     fun getTodayDistance(): Double {
@@ -1337,85 +1346,28 @@ class OdometerDatabaseHelper(
             return false
         }
 
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT litres_added
-                FROM fuel_records
-                WHERE id = ?
-                """,
-                arrayOf(id.toString())
-            )
+        val values = ContentValues()
+        values.put("litres_added", litres)
+        values.put("note", note)
 
-        var oldLitres =
-            0.0
-
-        cursor.use {
-
-            if (!it.moveToFirst()) {
-                return false
-            }
-
-            oldLitres =
-                it.getDouble(0)
-        }
-
-        val delta =
-            litres - oldLitres
-
-        val values =
-            ContentValues()
-
-        values.put(
-            "litres_added",
-            litres
-        )
-
-        values.put(
-            "note",
-            note
-        )
-
-        writableDatabase.update(
+        val changed = writableDatabase.update(
             TABLE_FUEL,
             values,
             "id = ?",
             arrayOf(id.toString())
         )
 
-        adjustLaterFuelAmounts(
-            id,
-            delta
-        )
+        if (changed > 0) {
+            rebuildFuelHistory()
+            recalculateLatestReserveCrossed()
+        }
 
-        recalculateLatestReserveCrossed()
-
-        return true
+        return changed > 0
     }
 
     fun deleteFuel(
         id: Long
     ) {
-
-        val cursor =
-            readableDatabase.rawQuery(
-                """
-                SELECT litres_added
-                FROM fuel_records
-                WHERE id = ?
-                """,
-                arrayOf(id.toString())
-            )
-
-        var litres =
-            0.0
-
-        cursor.use {
-
-            if (it.moveToFirst()) {
-                litres = it.getDouble(0)
-            }
-        }
 
         writableDatabase.delete(
             TABLE_FUEL,
@@ -1423,11 +1375,7 @@ class OdometerDatabaseHelper(
             arrayOf(id.toString())
         )
 
-        adjustLaterFuelAmounts(
-            id,
-            -litres
-        )
-
+        rebuildFuelHistory()
         recalculateLatestReserveCrossed()
     }
 
@@ -1715,6 +1663,169 @@ class OdometerDatabaseHelper(
 
         return records.firstOrNull()
             ?.reserveCrossed == true
+    }
+
+    fun setSpeedThreshold(value: Double) {
+
+        if (value <= 0.0) return
+
+        setSetting(
+            writableDatabase,
+            "speed_threshold",
+            value.toString()
+        )
+    }
+
+    fun getCurrentSpeed(): Double {
+        val trip = getActiveTrip() ?: return 0.0
+        val points = getTrackPoints(trip.id)
+        return points.lastOrNull()?.speedKmh ?: 0.0
+    }
+
+    fun getAverageSpeed(): Double {
+        val trip = getActiveTrip()
+        if (trip != null) {
+            val points = getTrackPoints(trip.id)
+            if (points.isNotEmpty()) return points.map { it.speedKmh }.average()
+        }
+        return getAllTrips().map { it.averageSpeed }
+            .filter { it > 0.0 }
+            .let { if (it.isEmpty()) 0.0 else it.average() }
+    }
+
+    fun getMaximumSpeed(): Double {
+        val active = getActiveTrip()
+        val activeMax = active?.let { getTrackPoints(it.id).maxOfOrNull { p -> p.speedKmh } ?: 0.0 } ?: 0.0
+        val completedMax = getAllTrips().maxOfOrNull { it.maxSpeed } ?: 0.0
+        return maxOf(activeMax, completedMax)
+    }
+
+    fun getMileage(): Double = getAverageMileage()
+
+    fun getEstimatedRange(): Double = getOverallRange()
+
+    fun getRangeUntilReserve(): Double = getRangeToReserve()
+
+    fun hasReserveBeenCrossed(): Boolean = isReserveCrossed()
+
+    fun getDisplayedOdometerOffset(): Double =
+        getSetting("odometer_display_offset", 0.0)
+
+    fun clearDisplayedOdometer() {
+        val rawTotal = getRawTripTotal()
+        setSetting(
+            writableDatabase,
+            "odometer_display_offset",
+            (-rawTotal).toString()
+        )
+    }
+
+    private fun getRawTripTotal(): Double {
+        val cursor = readableDatabase.rawQuery(
+            "SELECT COALESCE(SUM(distance_km), 0) FROM trips WHERE completed = 1",
+            null
+        )
+        cursor.use {
+            if (it.moveToFirst()) return it.getDouble(0)
+        }
+        return 0.0
+    }
+
+    fun deleteTrip(tripId: Long): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.delete(TABLE_POINTS, "trip_id = ?", arrayOf(tripId.toString()))
+            val deleted = db.delete(TABLE_TRIPS, "id = ?", arrayOf(tripId.toString())) > 0
+            db.setTransactionSuccessful()
+            deleted
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun isDistanceAlertEnabled(): Boolean =
+        getSetting("distance_alert_enabled", 0.0) > 0.5
+
+    fun getDistanceAlertTarget(): Double =
+        getSetting("distance_alert_target", 0.0)
+
+    fun setDistanceAlert(enabled: Boolean, target: Double) {
+        setSetting(
+            writableDatabase,
+            "distance_alert_enabled",
+            if (enabled) "1" else "0"
+        )
+        setSetting(
+            writableDatabase,
+            "distance_alert_target",
+            target.coerceAtLeast(0.0).toString()
+        )
+    }
+
+    fun isDistanceAlertTriggered(): Boolean =
+        getSetting("distance_alert_triggered", 0.0) > 0.5
+
+    fun resetDistanceAlertTrigger() {
+        setSetting(writableDatabase, "distance_alert_triggered", "0")
+    }
+
+    fun checkDistanceAlert(): Boolean {
+        if (!isDistanceAlertEnabled()) return false
+        val target = getDistanceAlertTarget()
+        if (target <= 0.0) return false
+        if (getTotalOdometer() >= target && !isDistanceAlertTriggered()) {
+            setSetting(writableDatabase, "distance_alert_triggered", "1")
+            return true
+        }
+        return false
+    }
+
+    fun deleteAllData() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_POINTS, null, null)
+            db.delete(TABLE_TRIPS, null, null)
+            db.delete(TABLE_FUEL, null, null)
+            db.delete(TABLE_SETTINGS, null, null)
+            setSetting(db, "speed_threshold", "6.0")
+            setSetting(db, "tank_capacity", DEFAULT_TANK.toString())
+            setSetting(db, "reserve_fuel", DEFAULT_RESERVE.toString())
+            setSetting(db, "odometer_display_offset", "0.0")
+            setSetting(db, "distance_alert_enabled", "0")
+            setSetting(db, "distance_alert_target", "0.0")
+            setSetting(db, "distance_alert_triggered", "0")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun rebuildFuelHistory() {
+        val db = writableDatabase
+        val records = mutableListOf<Pair<Long, Double>>()
+        val cursor = db.rawQuery(
+            "SELECT id, litres_added FROM fuel_records ORDER BY time ASC, id ASC",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) records.add(it.getLong(0) to it.getDouble(1))
+        }
+        var fuel = 0.0
+        val capacity = getTankCapacity()
+        db.beginTransaction()
+        try {
+            for ((id, litres) in records) {
+                fuel = (fuel + litres).coerceIn(0.0, capacity)
+                val values = ContentValues()
+                values.put("fuel_after_litres", fuel)
+                db.update(TABLE_FUEL, values, "id = ?", arrayOf(id.toString()))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun tripSelectSql(
