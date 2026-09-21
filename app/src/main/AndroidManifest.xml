@@ -64,6 +64,14 @@
             android:name=".RouteMapActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".DaysActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".DayDetailActivity"
+            android:exported="false" />
+
         <service
             android:name=".LocationTrackingService"
             android:enabled="true"
