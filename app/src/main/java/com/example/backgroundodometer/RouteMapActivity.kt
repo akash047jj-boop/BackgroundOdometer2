@@ -13,9 +13,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
@@ -69,15 +70,9 @@ class RouteMapActivity : Activity() {
                     )
                 )
 
-            /*
-             * V9:
-             *
-             * Explicitly identify the app to the
-             * OSM tile server.
-             */
             Configuration.getInstance()
                 .userAgentValue =
-                "BackgroundOdometer/9.0 " +
+                "BackgroundOdometer/10.0 " +
                     "(Android; com.example.backgroundodometer)"
 
         } catch (_: Exception) {
@@ -132,6 +127,53 @@ class RouteMapActivity : Activity() {
         }
 
         loadRoute()
+    }
+
+    private fun createCartoTileSource():
+        OnlineTileSourceBase {
+
+        return object :
+            OnlineTileSourceBase(
+                "CARTO Voyager V10",
+                0,
+                20,
+                256,
+                ".png",
+                arrayOf(
+                    "https://basemaps.cartocdn.com/rastertiles/voyager/"
+                ),
+                "© OpenStreetMap contributors © CARTO"
+            ) {
+
+            override fun getTileURLString(
+                mapTileIndex: Long
+            ): String {
+
+                val zoom =
+                    MapTileIndex.getZoom(
+                        mapTileIndex
+                    )
+
+                val x =
+                    MapTileIndex.getX(
+                        mapTileIndex
+                    )
+
+                val y =
+                    MapTileIndex.getY(
+                        mapTileIndex
+                    )
+
+                return getBaseUrl() +
+                    zoom +
+                    "/" +
+                    x +
+                    "/" +
+                    y +
+                    ".png?key=" +
+                    BuildConfig.CARTO_API_KEY
+            }
+        }
     }
 
     private fun buildScreen() {
@@ -258,9 +300,6 @@ class RouteMapActivity : Activity() {
             )
         )
 
-        /*
-         * Map + attribution container.
-         */
         val mapFrame =
             FrameLayout(this)
 
@@ -271,8 +310,14 @@ class RouteMapActivity : Activity() {
         map =
             MapView(this)
 
+        /*
+         * V10:
+         *
+         * Use CARTO Voyager instead of
+         * the OpenStreetMap MAPNIK tiles.
+         */
         map.setTileSource(
-            TileSourceFactory.MAPNIK
+            createCartoTileSource()
         )
 
         map.setMultiTouchControls(
@@ -287,10 +332,6 @@ class RouteMapActivity : Activity() {
             true
         )
 
-        /*
-         * Clear only the in-memory cache for this
-         * newly configured map instance.
-         */
         try {
 
             map.tileProvider
@@ -308,13 +349,14 @@ class RouteMapActivity : Activity() {
         )
 
         /*
-         * Required visible OSM attribution.
+         * CARTO requires CARTO and
+         * OpenStreetMap attribution.
          */
         val attribution =
             TextView(this)
 
         attribution.text =
-            "© OpenStreetMap contributors"
+            "© OpenStreetMap contributors © CARTO"
 
         attribution.textSize =
             11f
