@@ -40,6 +40,7 @@ class MainActivity : Activity() {
     private lateinit var fuelText: TextView
     private lateinit var rangeText: TextView
     private lateinit var reserveStatusText: TextView
+    private lateinit var belowReserveButton: TextView
     private lateinit var trackingButton: TextView
     private lateinit var drawerLayout: DrawerLayout
 
@@ -90,21 +91,25 @@ class MainActivity : Activity() {
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.CENTER_HORIZONTAL
-        root.setPadding(20, 28, 20, 30)
+        root.setPadding(20, 20, 20, 30)
 
         val topBar = LinearLayout(this)
-        topBar.orientation = LinearLayout.HORIZONTAL
-        topBar.gravity = Gravity.CENTER_VERTICAL
-
-        val menu = createMenuButton("☰")
-        topBar.addView(menu, LinearLayout.LayoutParams(58, 58))
+        topBar.orientation = LinearLayout.VERTICAL
+        topBar.gravity = Gravity.CENTER_HORIZONTAL
+        topBar.setPadding(0, dp(12), 0, 0)
 
         val title = createTitle("BACKGROUND ODOMETER")
-        topBar.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        topBar.addView(title, wrapParams())
 
-        topBar.addView(View(this), LinearLayout.LayoutParams(58, 58))
-        root.addView(topBar, wrapParams())
-        addSpace(root, 20)
+        val menu = createMenuButton("☰  MENU")
+        menu.textSize = 18f
+        topBar.addView(menu, buttonParams())
+
+        val topBarParams = wrapParams().apply {
+            topMargin = dp(10)
+        }
+        root.addView(topBar, topBarParams)
+        addSpace(root, 18)
 
         root.addView(createLabel("TOTAL ODOMETER", TIFFANY), wrapParams())
         totalText = createLargeValue("0.00 km")
@@ -154,13 +159,34 @@ class MainActivity : Activity() {
         fuelCard.setPadding(16, 14, 16, 14)
         fuelCard.background = cardBackground()
         fuelCard.addView(createLabel("FUEL", TIFFANY), wrapParams())
+        val fuelStatusRow = LinearLayout(this)
+        fuelStatusRow.orientation = LinearLayout.HORIZONTAL
+        fuelStatusRow.gravity = Gravity.CENTER_VERTICAL
         fuelText = createMediumValue("0.00 L")
         fuelText.textSize = 22f
-        fuelCard.addView(fuelText, wrapParams())
+        fuelStatusRow.addView(fuelText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        reserveStatusText = createStatusText("ABOVE RESERVE", false)
+        reserveStatusText.textSize = 12f
+        fuelStatusRow.addView(reserveStatusText, LinearLayout.LayoutParams(dp(145), ViewGroup.LayoutParams.WRAP_CONTENT))
+        fuelCard.addView(fuelStatusRow, wrapParams())
         rangeText = createLabel("Range: --", "#AAAAAA")
         fuelCard.addView(rangeText, wrapParams())
-        reserveStatusText = createStatusText("ABOVE RESERVE", false)
-        fuelCard.addView(reserveStatusText, wrapParams())
+
+        belowReserveButton = createAction("BELOW RESERVE — TAP TO MARK")
+        belowReserveButton.textSize = 14f
+        fuelCard.addView(belowReserveButton, wrapParams())
+        belowReserveButton.setOnClickListener {
+            if (!database.isReserveReached()) {
+                Toast.makeText(this, "Fuel is still above reserve.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (database.markCurrentFuelBelowReserve()) {
+                Toast.makeText(this, "Below-reserve point saved for mileage calculation.", Toast.LENGTH_SHORT).show()
+                refreshData()
+            } else {
+                Toast.makeText(this, "Below-reserve point is already saved.", Toast.LENGTH_SHORT).show()
+            }
+        }
         root.addView(fuelCard, wrapParams())
 
         addSpace(root, 12)
@@ -200,7 +226,7 @@ class MainActivity : Activity() {
         addDrawerItem(drawer, "SETTINGS") { openActivity(SettingsActivity::class.java) }
         addDrawerItem(drawer, "EXPORT") { openActivity(ExportActivity::class.java) }
         addSpace(drawer, 25)
-        drawer.addView(createLabel("Background Odometer V15", "#777777"), wrapParams())
+        drawer.addView(createLabel("Background Odometer V16", "#777777"), wrapParams())
         return drawer
     }
 
@@ -242,6 +268,7 @@ class MainActivity : Activity() {
         val note = EditText(this)
         note.hint = "Note (optional)"
         layout.addView(note, wrapParams())
+
         AlertDialog.Builder(this)
             .setTitle("ADD FUEL")
             .setView(layout)
@@ -304,7 +331,12 @@ class MainActivity : Activity() {
             row.setPadding(12, 12, 12, 12)
             val date = java.text.SimpleDateFormat("dd MMM yyyy hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(record.time))
             val text = TextView(this)
-            text.text = "$date\n+%.2f L • Fuel after %.2f L\n%s".format(record.litresAdded, record.fuelAfterLitres, record.note)
+            val isMarker = record.litresAdded <= 0.0 && record.fuelStatus == "BELOW"
+            text.text = if (isMarker) {
+                "$date\nBELOW RESERVE MARKER • Odometer %.2f km\n%s".format(record.odometerKm, record.note)
+            } else {
+                "$date\n+%.2f L • Fuel after %.2f L\n%s".format(record.litresAdded, record.fuelAfterLitres, record.note)
+            }
             text.textSize = 15f
             text.setTextColor(Color.WHITE)
             row.addView(text, wrapParams())
@@ -412,9 +444,19 @@ class MainActivity : Activity() {
         rangeText.text = if (mileage > 0) "Range: %.1f km • Mileage: %.2f km/L".format(database.getOverallRange(), mileage) else "Range: -- • Mileage: --"
 
         val below = database.isReserveReached()
-        reserveStatusText.text = if (below) "BELOW RESERVE" else "ABOVE RESERVE"
+        val currentStatus = if (below) "BELOW RESERVE" else "ABOVE RESERVE"
+        reserveStatusText.text = currentStatus
         reserveStatusText.background = statusBackground(below)
         reserveStatusText.setTextColor(if (below) Color.WHITE else Color.parseColor(TIFFANY))
+
+        belowReserveButton.visibility = if (below) View.VISIBLE else View.GONE
+        belowReserveButton.text = if (database.hasCurrentBelowReserveMarker()) {
+            "BELOW RESERVE ✓ • MILEAGE POINT SAVED"
+        } else {
+            "BELOW RESERVE — TAP TO MARK"
+        }
+        belowReserveButton.isEnabled = !database.hasCurrentBelowReserveMarker()
+        belowReserveButton.alpha = if (belowReserveButton.isEnabled) 1f else 0.7f
     }
 
     private fun showBackgroundLocationHintOnce() {
@@ -494,7 +536,7 @@ class MainActivity : Activity() {
     }
 
     private fun createMenuButton(text: String) = TextView(this).apply {
-        this.text = text; textSize = 29f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = buttonBackground(false)
+        this.text = text; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = buttonBackground(false); minWidth = dp(120); minHeight = dp(64); setPadding(6, 0, 6, 0)
     }
 
     private fun createStatusText(text: String, active: Boolean) = TextView(this).apply {
