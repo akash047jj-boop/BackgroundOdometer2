@@ -506,9 +506,9 @@ class MainActivity : Activity() {
             text.text = if (isMarker) {
                 "$date\nBELOW RESERVE MARKER • Odometer %.2f km\n%s".format(record.odometerKm, record.note)
             } else {
-                "$date\n+%.2f L • Fuel after %.2f L • %s • %s\n%s".format(
+                "$date\n+%.2f L • Fuel after %s • %s • %s\n%s".format(
                     record.litresAdded,
-                    record.fuelAfterLitres,
+                    if (record.fuelAfterLitres >= 0.0) "%.2f L".format(record.fuelAfterLitres) else "--",
                     statusLine,
                     if (record.tankLevel == "FULL") "FULL TANK" else "PARTIAL",
                     record.note
@@ -786,7 +786,11 @@ class MainActivity : Activity() {
 
         val fuel = database.getCurrentFuel()
         val tank = database.getTankCapacity()
-        fuelText.text = "%.2f L / %.2f L".format(fuel, tank)
+        fuelText.text = if (fuel != null) {
+            "%.2f L / %.2f L".format(fuel, tank)
+        } else {
+            "-- / %.2f L".format(tank)
+        }
         val confirmedMileage = database.getConfirmedMileage()
         val estimatedMileage = database.getEstimatedMileage()
         val bestMileage = database.getBestMileage()
