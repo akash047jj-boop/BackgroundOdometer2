@@ -2,6 +2,7 @@ package com.example.backgroundodometer
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -39,15 +41,29 @@ class MainActivity : Activity() {
 
     private var trackingActive = false
 
+    private val preferences by lazy {
+        getSharedPreferences(
+            "background_odometer",
+            MODE_PRIVATE
+        )
+    }
+
     companion object {
+
         private const val TIFFANY = "#00BCD4"
         private const val DARK = "#151515"
 
         private const val REQUEST_LOCATION = 100
         private const val REQUEST_NOTIFICATIONS = 101
+
+        private const val PREF_AUTO_TRACKING =
+            "auto_tracking_enabled"
+
+        private const val PREF_BACKGROUND_HINT =
+            "background_location_hint_shown"
     }
 
-    private val speedReceiver =
+    private val serviceReceiver =
         object : BroadcastReceiver() {
 
             override fun onReceive(
@@ -70,6 +86,41 @@ class MainActivity : Activity() {
                         "%.1f km/h".format(speed)
 
                     refreshData()
+
+                    return
+                }
+
+                if (
+                    intent?.action ==
+                    LocationTrackingService.ACTION_STATUS_UPDATE
+                ) {
+
+                    val status =
+                        intent.getStringExtra(
+                            LocationTrackingService.EXTRA_STATUS
+                        ) ?: return
+
+                    updateStatus(
+                        status
+                    )
+
+                    val speed =
+                        intent.getDoubleExtra(
+                            LocationTrackingService.EXTRA_SPEED,
+                            0.0
+                        )
+
+                    if (
+                        speed >= 0.0
+                    ) {
+
+                        speedText.text =
+                            "%.1f km/h".format(
+                                speed
+                            )
+                    }
+
+                    refreshData()
                 }
             }
         }
@@ -78,7 +129,9 @@ class MainActivity : Activity() {
         savedInstanceState: Bundle?
     ) {
 
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
 
         database =
             OdometerDatabaseHelper(this)
@@ -116,62 +169,100 @@ class MainActivity : Activity() {
         )
 
         root.addView(
-            createTitle("BACKGROUND ODOMETER"),
+            createTitle(
+                "BACKGROUND ODOMETER"
+            ),
             wrapParams()
         )
 
-        addSpace(root, 22)
+        addSpace(
+            root,
+            22
+        )
 
         root.addView(
-            createLabel("TOTAL ODOMETER", TIFFANY),
+            createLabel(
+                "TOTAL ODOMETER",
+                TIFFANY
+            ),
             wrapParams()
         )
 
-        addSpace(root, 4)
+        addSpace(
+            root,
+            4
+        )
 
         totalText =
-            createLargeValue("0.00 km")
+            createLargeValue(
+                "0.00 km"
+            )
 
         root.addView(
             totalText,
             wrapParams()
         )
 
-        addSpace(root, 24)
+        addSpace(
+            root,
+            24
+        )
 
         root.addView(
-            createLabel("TODAY", "#888888"),
+            createLabel(
+                "TODAY",
+                "#888888"
+            ),
             wrapParams()
         )
 
-        addSpace(root, 3)
+        addSpace(
+            root,
+            3
+        )
 
         todayText =
-            createMediumValue("0.00 km")
+            createMediumValue(
+                "0.00 km"
+            )
 
         root.addView(
             todayText,
             wrapParams()
         )
 
-        addSpace(root, 24)
+        addSpace(
+            root,
+            24
+        )
 
         root.addView(
-            createLabel("CURRENT SPEED", "#888888"),
+            createLabel(
+                "CURRENT SPEED",
+                "#888888"
+            ),
             wrapParams()
         )
 
-        addSpace(root, 3)
+        addSpace(
+            root,
+            3
+        )
 
         speedText =
-            createMediumValue("0.0 km/h")
+            createMediumValue(
+                "0.0 km/h"
+            )
 
         root.addView(
             speedText,
             wrapParams()
         )
 
-        addSpace(root, 18)
+        addSpace(
+            root,
+            18
+        )
 
         val speedRow =
             LinearLayout(this)
@@ -215,7 +306,10 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 25)
+        addSpace(
+            root,
+            25
+        )
 
         statusText =
             TextView(this)
@@ -238,16 +332,24 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 18)
+        addSpace(
+            root,
+            18
+        )
 
         trackingButton =
-            createAction("START TRACKING")
+            createAction(
+                "START TRACKING"
+            )
 
         trackingButton.setOnClickListener {
 
             if (trackingActive) {
+
                 stopTracking()
+
             } else {
+
                 startTracking()
             }
         }
@@ -257,12 +359,18 @@ class MainActivity : Activity() {
             fullParams(62)
         )
 
-        addSpace(root, 10)
+        addSpace(
+            root,
+            10
+        )
 
         val refresh =
-            createAction("REFRESH")
+            createAction(
+                "REFRESH"
+            )
 
         refresh.setOnClickListener {
+
             refreshData()
         }
 
@@ -271,10 +379,15 @@ class MainActivity : Activity() {
             fullParams(62)
         )
 
-        addSpace(root, 10)
+        addSpace(
+            root,
+            10
+        )
 
         val trips =
-            createAction("TRIPS")
+            createAction(
+                "TRIPS"
+            )
 
         trips.setOnClickListener {
 
@@ -291,7 +404,10 @@ class MainActivity : Activity() {
             fullParams(62)
         )
 
-        addSpace(root, 25)
+        addSpace(
+            root,
+            25
+        )
 
         root.addView(
             createLabel(
@@ -301,10 +417,15 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 5)
+        addSpace(
+            root,
+            5
+        )
 
         lastTripText =
-            createMediumValue("No trips yet")
+            createMediumValue(
+                "No trips yet"
+            )
 
         lastTripText.textSize =
             20f
@@ -314,7 +435,10 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 25)
+        addSpace(
+            root,
+            25
+        )
 
         root.addView(
             createLabel(
@@ -324,7 +448,10 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 5)
+        addSpace(
+            root,
+            5
+        )
 
         val threshold =
             createMediumValue(
@@ -338,7 +465,10 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(root, 35)
+        addSpace(
+            root,
+            35
+        )
 
         root.addView(
             createLabel(
@@ -356,7 +486,9 @@ class MainActivity : Activity() {
             )
         )
 
-        setContentView(scroll)
+        setContentView(
+            scroll
+        )
     }
 
     private fun startTracking() {
@@ -375,6 +507,22 @@ class MainActivity : Activity() {
             return
         }
 
+        /*
+         * This is the important V9 setting.
+         *
+         * START TRACKING means:
+         *
+         * GPS ON  -> track
+         * GPS OFF -> wait
+         * GPS ON again -> automatically track
+         */
+        preferences.edit()
+            .putBoolean(
+                PREF_AUTO_TRACKING,
+                true
+            )
+            .apply()
+
         val intent =
             Intent(
                 this,
@@ -388,7 +536,8 @@ class MainActivity : Activity() {
                 intent
             )
 
-            trackingActive = true
+            trackingActive =
+                true
 
             trackingButton.text =
                 "STOP TRACKING"
@@ -396,14 +545,21 @@ class MainActivity : Activity() {
             trackingButton.background =
                 buttonBackground(true)
 
-            statusText.text =
-                "GPS STATUS\nTRACKING ACTIVE"
+            updateStatusFromCurrentGps()
 
-            statusText.setTextColor(
-                Color.parseColor(TIFFANY)
-            )
+            showBackgroundLocationHintOnce()
 
         } catch (e: Exception) {
+
+            preferences.edit()
+                .putBoolean(
+                    PREF_AUTO_TRACKING,
+                    false
+                )
+                .apply()
+
+            trackingActive =
+                false
 
             statusText.text =
                 "GPS STATUS\nUNABLE TO START"
@@ -422,6 +578,13 @@ class MainActivity : Activity() {
 
     private fun stopTracking() {
 
+        preferences.edit()
+            .putBoolean(
+                PREF_AUTO_TRACKING,
+                false
+            )
+            .apply()
+
         val intent =
             Intent(
                 this,
@@ -432,11 +595,16 @@ class MainActivity : Activity() {
             LocationTrackingService.ACTION_STOP
 
         try {
-            startService(intent)
+
+            startService(
+                intent
+            )
+
         } catch (_: Exception) {
         }
 
-        trackingActive = false
+        trackingActive =
+            false
 
         trackingButton.text =
             "START TRACKING"
@@ -457,7 +625,159 @@ class MainActivity : Activity() {
         refreshData()
     }
 
-    private fun notificationsAllowed(): Boolean {
+    private fun updateStatusFromCurrentGps() {
+
+        if (!isLocationEnabled()) {
+
+            updateStatus(
+                "GPS OFF\nWAITING"
+            )
+
+        } else {
+
+            updateStatus(
+                "GPS ON\nTRACKING ACTIVE"
+            )
+        }
+    }
+
+    private fun updateStatus(
+        status: String
+    ) {
+
+        statusText.text =
+            "GPS STATUS\n$status"
+
+        val lower =
+            status.lowercase()
+
+        if (
+            lower.contains("tracking") ||
+            lower.contains("gps on")
+        ) {
+
+            statusText.setTextColor(
+                Color.parseColor(
+                    TIFFANY
+                )
+            )
+
+        } else {
+
+            statusText.setTextColor(
+                Color.LTGRAY
+            )
+        }
+    }
+
+    private fun isLocationEnabled():
+        Boolean {
+
+        val manager =
+            getSystemService(
+                Context.LOCATION_SERVICE
+            ) as android.location.LocationManager
+
+        return try {
+
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.P
+            ) {
+
+                manager.isLocationEnabled()
+
+            } else {
+
+                manager.isProviderEnabled(
+                    android.location.LocationManager.GPS_PROVIDER
+                ) ||
+                    manager.isProviderEnabled(
+                        android.location.LocationManager.NETWORK_PROVIDER
+                    )
+            }
+
+        } catch (_: Exception) {
+
+            false
+        }
+    }
+
+    private fun showBackgroundLocationHintOnce() {
+
+        if (
+            Build.VERSION.SDK_INT <
+            Build.VERSION_CODES.Q
+        ) {
+            return
+        }
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        if (
+            preferences.getBoolean(
+                PREF_BACKGROUND_HINT,
+                false
+            )
+        ) {
+            return
+        }
+
+        preferences.edit()
+            .putBoolean(
+                PREF_BACKGROUND_HINT,
+                true
+            )
+            .apply()
+
+        AlertDialog.Builder(this)
+            .setTitle(
+                "Background location"
+            )
+            .setMessage(
+                "For the strongest automatic tracking support, " +
+                    "including restarting after a phone reboot, " +
+                    "set Background Odometer location permission to " +
+                    "\"Allow all the time\" in Android settings."
+            )
+            .setNegativeButton(
+                "LATER",
+                null
+            )
+            .setPositiveButton(
+                "OPEN SETTINGS"
+            ) { _, _ ->
+
+                try {
+
+                    val intent =
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        )
+
+                    intent.data =
+                        Uri.parse(
+                            "package:$packageName"
+                        )
+
+                    startActivity(intent)
+
+                } catch (_: Exception) {
+                }
+            }
+            .show()
+    }
+
+    private fun notificationsAllowed():
+        Boolean {
 
         return if (
             Build.VERSION.SDK_INT >=
@@ -501,6 +821,7 @@ class MainActivity : Activity() {
 
                 openNotificationSettings()
             }
+
         } else {
 
             openNotificationSettings()
@@ -521,7 +842,9 @@ class MainActivity : Activity() {
                 packageName
             )
 
-            startActivity(intent)
+            startActivity(
+                intent
+            )
 
         } catch (_: Exception) {
         }
@@ -593,7 +916,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
+    private fun hasLocationPermission():
+        Boolean {
 
         return ContextCompat.checkSelfPermission(
             this,
@@ -646,9 +970,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text = text
+            this.text =
+                text
 
-            textSize = 25f
+            textSize =
+                25f
 
             setTextColor(
                 Color.WHITE
@@ -669,12 +995,16 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text = text
+            this.text =
+                text
 
-            textSize = 15f
+            textSize =
+                15f
 
             setTextColor(
-                Color.parseColor(color)
+                Color.parseColor(
+                    color
+                )
             )
 
             gravity =
@@ -688,9 +1018,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text = text
+            this.text =
+                text
 
-            textSize = 46f
+            textSize =
+                46f
 
             setTextColor(
                 Color.WHITE
@@ -710,9 +1042,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text = text
+            this.text =
+                text
 
-            textSize = 25f
+            textSize =
+                25f
 
             setTextColor(
                 Color.WHITE
@@ -754,7 +1088,9 @@ class MainActivity : Activity() {
         )
 
         val valueView =
-            createMediumValue(value)
+            createMediumValue(
+                value
+            )
 
         valueView.textSize =
             20f
@@ -776,9 +1112,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text = text
+            this.text =
+                text
 
-            textSize = 17f
+            textSize =
+                17f
 
             setTextColor(
                 Color.WHITE
@@ -790,7 +1128,8 @@ class MainActivity : Activity() {
             gravity =
                 Gravity.CENTER
 
-            isClickable = true
+            isClickable =
+                true
 
             background =
                 buttonBackground(false)
@@ -803,7 +1142,8 @@ class MainActivity : Activity() {
 
         return GradientDrawable().apply {
 
-            cornerRadius = 18f
+            cornerRadius =
+                18f
 
             setColor(
                 Color.parseColor(
@@ -817,7 +1157,9 @@ class MainActivity : Activity() {
 
             setStroke(
                 2,
-                Color.parseColor(TIFFANY)
+                Color.parseColor(
+                    TIFFANY
+                )
             )
         }
     }
@@ -869,14 +1211,49 @@ class MainActivity : Activity() {
 
         super.onResume()
 
+        val filter =
+            IntentFilter().apply {
+
+                addAction(
+                    LocationTrackingService.ACTION_SPEED_UPDATE
+                )
+
+                addAction(
+                    LocationTrackingService.ACTION_STATUS_UPDATE
+                )
+            }
+
         ContextCompat.registerReceiver(
             this,
-            speedReceiver,
-            IntentFilter(
-                LocationTrackingService.ACTION_SPEED_UPDATE
-            ),
+            serviceReceiver,
+            filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+
+        trackingActive =
+            preferences.getBoolean(
+                PREF_AUTO_TRACKING,
+                false
+            )
+
+        if (trackingActive) {
+
+            trackingButton.text =
+                "STOP TRACKING"
+
+            trackingButton.background =
+                buttonBackground(true)
+
+            updateStatusFromCurrentGps()
+
+        } else {
+
+            trackingButton.text =
+                "START TRACKING"
+
+            trackingButton.background =
+                buttonBackground(false)
+        }
 
         refreshData()
     }
@@ -884,7 +1261,11 @@ class MainActivity : Activity() {
     override fun onPause() {
 
         try {
-            unregisterReceiver(speedReceiver)
+
+            unregisterReceiver(
+                serviceReceiver
+            )
+
         } catch (_: Exception) {
         }
 
