@@ -1,16 +1,17 @@
 package com.example.backgroundodometer
 
+import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.View
+import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import android.app.Activity
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
@@ -23,13 +24,14 @@ import java.util.concurrent.Executors
 
 class RouteMapActivity : Activity() {
 
-    private lateinit var map: MapView
+    private lateinit var map:
+        MapView
 
     private lateinit var database:
         OdometerDatabaseHelper
 
-    private var tripId:
-        Long = -1L
+    private var tripId =
+        -1L
 
     private lateinit var statusText:
         TextView
@@ -44,32 +46,41 @@ class RouteMapActivity : Activity() {
         Executors.newSingleThreadExecutor()
 
     private val mainHandler =
-        Handler(Looper.getMainLooper())
+        Handler(
+            Looper.getMainLooper()
+        )
 
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
 
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
 
-        /*
-         * Initialize osmdroid BEFORE creating MapView.
-         */
         try {
 
-            Configuration.getInstance().load(
-                applicationContext,
-                getSharedPreferences(
-                    "osmdroid",
-                    MODE_PRIVATE
+            Configuration.getInstance()
+                .load(
+                    applicationContext,
+                    getSharedPreferences(
+                        "osmdroid",
+                        MODE_PRIVATE
+                    )
                 )
-            )
 
+            /*
+             * V9:
+             *
+             * Explicitly identify the app to the
+             * OSM tile server.
+             */
             Configuration.getInstance()
                 .userAgentValue =
-                packageName
+                "BackgroundOdometer/9.0 " +
+                    "(Android; com.example.backgroundodometer)"
 
-        } catch (e: Exception) {
+        } catch (_: Exception) {
 
             Toast.makeText(
                 this,
@@ -88,7 +99,9 @@ class RouteMapActivity : Activity() {
                 -1L
             )
 
-        if (tripId <= 0L) {
+        if (
+            tripId <= 0L
+        ) {
 
             Toast.makeText(
                 this,
@@ -101,10 +114,6 @@ class RouteMapActivity : Activity() {
             return
         }
 
-        /*
-         * Build the screen only after configuration
-         * has successfully initialized.
-         */
         try {
 
             buildScreen()
@@ -250,8 +259,15 @@ class RouteMapActivity : Activity() {
         )
 
         /*
-         * Create MapView.
+         * Map + attribution container.
          */
+        val mapFrame =
+            FrameLayout(this)
+
+        mapFrame.setBackgroundColor(
+            Color.DKGRAY
+        )
+
         map =
             MapView(this)
 
@@ -271,26 +287,81 @@ class RouteMapActivity : Activity() {
             true
         )
 
-        map.setBackgroundColor(
-            Color.DKGRAY
+        /*
+         * Clear only the in-memory cache for this
+         * newly configured map instance.
+         */
+        try {
+
+            map.tileProvider
+                .clearTileCache()
+
+        } catch (_: Exception) {
+        }
+
+        mapFrame.addView(
+            map,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         )
 
         /*
-         * Prevent the map from receiving a zero-height
-         * layout.
+         * Required visible OSM attribution.
          */
-        val mapParams =
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0
+        val attribution =
+            TextView(this)
+
+        attribution.text =
+            "© OpenStreetMap contributors"
+
+        attribution.textSize =
+            11f
+
+        attribution.setTextColor(
+            Color.BLACK
+        )
+
+        attribution.setBackgroundColor(
+            Color.WHITE
+        )
+
+        attribution.setPadding(
+            6,
+            3,
+            6,
+            3
+        )
+
+        val attributionParams =
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
 
-        mapParams.weight =
-            1f
+        attributionParams.gravity =
+            Gravity.BOTTOM or Gravity.END
+
+        attributionParams.setMargins(
+            0,
+            0,
+            8,
+            8
+        )
+
+        mapFrame.addView(
+            attribution,
+            attributionParams
+        )
 
         root.addView(
-            map,
-            mapParams
+            mapFrame,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
         )
 
         val backButton =
@@ -312,7 +383,9 @@ class RouteMapActivity : Activity() {
             )
         )
 
-        setContentView(root)
+        setContentView(
+            root
+        )
     }
 
     private fun loadRoute() {
@@ -345,7 +418,9 @@ class RouteMapActivity : Activity() {
                         return@post
                     }
 
-                    if (trip == null) {
+                    if (
+                        trip == null
+                    ) {
 
                         statusText.text =
                             "TRIP NOT FOUND"
@@ -353,12 +428,10 @@ class RouteMapActivity : Activity() {
                         return@post
                     }
 
-                    /*
-                     * Display distance information.
-                     */
                     val displayedDistance =
                         if (
-                            trip.roadDistanceKm > 0.0
+                            trip.roadDistanceKm >
+                            0.0
                         ) {
 
                             trip.roadDistanceKm
@@ -382,10 +455,9 @@ class RouteMapActivity : Activity() {
                             trip.gpsDistanceKm
                         )
 
-                    /*
-                     * No GPS points.
-                     */
-                    if (rawPoints.isEmpty()) {
+                    if (
+                        rawPoints.isEmpty()
+                    ) {
 
                         statusText.text =
                             "NO GPS ROUTE RECORDED"
@@ -393,9 +465,6 @@ class RouteMapActivity : Activity() {
                         return@post
                     }
 
-                    /*
-                     * Convert database points to GeoPoints.
-                     */
                     val rawGeoPoints =
                         rawPoints.map {
 
@@ -406,19 +475,12 @@ class RouteMapActivity : Activity() {
                         }
 
                     /*
-                     * IMPORTANT:
-                     *
-                     * Always draw the raw GPS route first.
-                     *
-                     * This does NOT require OSRM.
+                     * GPS route always comes first.
                      */
                     drawGpsRoute(
                         rawGeoPoints
                     )
 
-                    /*
-                     * Try cached road route.
-                     */
                     val cached =
                         MapMatchingHelper
                             .getCachedResult(
@@ -442,10 +504,9 @@ class RouteMapActivity : Activity() {
                         "GPS ROUTE SHOWN • MATCHING ROAD..."
                 }
 
-                /*
-                 * Road matching happens away from UI thread.
-                 */
-                if (rawPoints.size >= 2) {
+                if (
+                    rawPoints.size >= 2
+                ) {
 
                     val threshold =
                         database.getSpeedThreshold()
@@ -501,7 +562,7 @@ class RouteMapActivity : Activity() {
                     }
                 }
 
-            } catch (e: Exception) {
+            } catch (_: Exception) {
 
                 mainHandler.post {
 
@@ -587,17 +648,19 @@ class RouteMapActivity : Activity() {
         points: List<GeoPoint>
     ) {
 
-        if (points.isEmpty()) {
+        if (
+            points.isEmpty()
+        ) {
             return
         }
 
         clearRouteLines()
+
         clearMarkers()
 
-        /*
-         * Draw GPS route.
-         */
-        if (points.size >= 2) {
+        if (
+            points.size >= 2
+        ) {
 
             val route =
                 Polyline()
@@ -620,9 +683,6 @@ class RouteMapActivity : Activity() {
             )
         }
 
-        /*
-         * Start marker.
-         */
         val start =
             Marker(map)
 
@@ -636,10 +696,9 @@ class RouteMapActivity : Activity() {
             start
         )
 
-        /*
-         * End marker.
-         */
-        if (points.size >= 2) {
+        if (
+            points.size >= 2
+        ) {
 
             val end =
                 Marker(map)
@@ -661,20 +720,20 @@ class RouteMapActivity : Activity() {
         fitMapToRoute(
             points
         )
+
+        map.invalidate()
     }
 
     private fun drawRoadRoute(
         points: List<GeoPoint>
     ) {
 
-        if (points.size < 2) {
+        if (
+            points.size < 2
+        ) {
             return
         }
 
-        /*
-         * Remove only the existing route line.
-         * Markers remain.
-         */
         clearRouteLines()
 
         val route =
@@ -715,7 +774,9 @@ class RouteMapActivity : Activity() {
         points: List<GeoPoint>
     ) {
 
-        if (points.isEmpty()) {
+        if (
+            points.isEmpty()
+        ) {
             return
         }
 
@@ -738,9 +799,12 @@ class RouteMapActivity : Activity() {
                 } else {
 
                     val boundingBox =
-                        BoundingBox.fromGeoPoints(
-                            ArrayList(points)
-                        )
+                        BoundingBox
+                            .fromGeoPoints(
+                                ArrayList(
+                                    points
+                                )
+                            )
 
                     map.zoomToBoundingBox(
                         boundingBox,
@@ -760,7 +824,9 @@ class RouteMapActivity : Activity() {
 
         super.onResume()
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
 
             map.onResume()
         }
@@ -768,7 +834,9 @@ class RouteMapActivity : Activity() {
 
     override fun onPause() {
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
 
             map.onPause()
         }
@@ -780,7 +848,9 @@ class RouteMapActivity : Activity() {
 
         executor.shutdownNow()
 
-        if (::map.isInitialized) {
+        if (
+            ::map.isInitialized
+        ) {
 
             try {
 
@@ -790,7 +860,9 @@ class RouteMapActivity : Activity() {
             }
         }
 
-        if (::database.isInitialized) {
+        if (
+            ::database.isInitialized
+        ) {
 
             try {
 
