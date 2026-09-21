@@ -1,7 +1,12 @@
 package com.example.backgroundodometer
 
 import android.app.Activity
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -734,36 +739,7 @@ class RouteMapActivity : Activity() {
             )
         }
 
-        val start =
-            Marker(map)
-
-        start.position =
-            points.first()
-
-        start.title =
-            "START"
-
-        map.overlays.add(
-            start
-        )
-
-        if (
-            points.size >= 2
-        ) {
-
-            val end =
-                Marker(map)
-
-            end.position =
-                points.last()
-
-            end.title =
-                "END"
-
-            map.overlays.add(
-                end
-            )
-        }
+        addStartEndMarkers(points)
 
         statusText.text =
             "GPS ROUTE"
@@ -786,6 +762,7 @@ class RouteMapActivity : Activity() {
         }
 
         clearRouteLines()
+        clearMarkers()
 
         val route =
             Polyline()
@@ -811,6 +788,8 @@ class RouteMapActivity : Activity() {
             route
         )
 
+        addStartEndMarkers(points)
+
         statusText.text =
             "ROAD MATCHED ROUTE"
 
@@ -819,6 +798,71 @@ class RouteMapActivity : Activity() {
         )
 
         map.invalidate()
+    }
+
+    private fun addStartEndMarkers(points: List<GeoPoint>) {
+        if (points.isEmpty()) return
+
+        val start = Marker(map).apply {
+            position = points.first()
+            title = "START"
+            snippet = "Trip starting point"
+            icon = createRouteLabelIcon("START", Color.rgb(0, 170, 90))
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+        }
+        map.overlays.add(start)
+
+        if (points.size >= 2) {
+            val end = Marker(map).apply {
+                position = points.last()
+                title = "END"
+                snippet = "Trip ending point"
+                icon = createRouteLabelIcon("END", Color.rgb(210, 70, 70))
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            }
+            map.overlays.add(end)
+        }
+    }
+
+    private fun createRouteLabelIcon(label: String, color: Int): BitmapDrawable {
+        val density = resources.displayMetrics.density
+        val width = (96f * density).toInt()
+        val height = (44f * density).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+        canvas.drawRoundRect(
+            2f * density,
+            2f * density,
+            width - 2f * density,
+            height - 8f * density,
+            10f * density,
+            10f * density,
+            paint
+        )
+
+        paint.color = Color.WHITE
+        paint.textSize = 16f * density
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textAlign = Paint.Align.CENTER
+        val baseline = 25f * density
+        canvas.drawText(label, width / 2f, baseline, paint)
+
+        val pathPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        pathPaint.color = color
+        val cx = width / 2f
+        val top = height - 10f * density
+        val path = android.graphics.Path().apply {
+            moveTo(cx - 7f * density, top)
+            lineTo(cx + 7f * density, top)
+            lineTo(cx, height.toFloat())
+            close()
+        }
+        canvas.drawPath(path, pathPaint)
+
+        return BitmapDrawable(resources, bitmap)
     }
 
     private fun fitMapToRoute(
