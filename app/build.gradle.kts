@@ -4,30 +4,48 @@ plugins {
 }
 
 android {
-    namespace = "com.example.backgroundodometer"
 
-    compileSdk = 35
+    namespace =
+        "com.example.backgroundodometer"
+
+    compileSdk =
+        35
 
     defaultConfig {
-        applicationId = "com.example.backgroundodometer"
 
-        minSdk = 26
-        targetSdk = 35
+        applicationId =
+            "com.example.backgroundodometer"
 
-        versionCode = 7
-        versionName = "7.0"
+        minSdk =
+            26
+
+        targetSdk =
+            35
+
+        versionCode =
+            8
+
+        versionName =
+            "8.0"
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+
+        sourceCompatibility =
+            JavaVersion.VERSION_17
+
+        targetCompatibility =
+            JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+
+        jvmTarget =
+            "17"
     }
 
     signingConfigs {
+
         create("release") {
 
             val keystoreFile =
@@ -59,9 +77,11 @@ android {
     }
 
     buildTypes {
+
         release {
 
-            isMinifyEnabled = false
+            isMinifyEnabled =
+                false
 
             signingConfig =
                 signingConfigs.getByName(
