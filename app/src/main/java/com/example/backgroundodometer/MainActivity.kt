@@ -32,53 +32,28 @@ import java.util.Locale
 
 class MainActivity : Activity() {
 
-    private lateinit var database:
-        OdometerDatabaseHelper
+    private lateinit var database: OdometerDatabaseHelper
 
-    private lateinit var totalText:
-        TextView
+    private lateinit var totalText: TextView
+    private lateinit var todayText: TextView
+    private lateinit var speedText: TextView
+    private lateinit var averageText: TextView
+    private lateinit var maxText: TextView
+    private lateinit var statusText: TextView
+    private lateinit var lastTripText: TextView
 
-    private lateinit var todayText:
-        TextView
+    private lateinit var fuelText: TextView
+    private lateinit var mileageText: TextView
+    private lateinit var rangeText: TextView
+    private lateinit var reserveRangeText: TextView
+    private lateinit var reserveReachedButton: TextView
+    private lateinit var reserveCrossedButton: TextView
 
-    private lateinit var speedText:
-        TextView
+    private lateinit var trackingButton: TextView
 
-    private lateinit var averageText:
-        TextView
-
-    private lateinit var maxText:
-        TextView
-
-    private lateinit var statusText:
-        TextView
-
-    private lateinit var lastTripText:
-        TextView
-
-    private lateinit var trackingButton:
-        TextView
-
-    private lateinit var fuelText:
-        TextView
-
-    private lateinit var mileageText:
-        TextView
-
-    private lateinit var rangeText:
-        TextView
-
-    private lateinit var reserveText:
-        TextView
-
-    private lateinit var reserveButton:
-        TextView
-
-    private var trackingActive =
-        false
+    private var trackingActive = false
 
     private val preferences by lazy {
-
         getSharedPreferences(
             "background_odometer",
             MODE_PRIVATE
@@ -87,23 +62,11 @@ class MainActivity : Activity() {
 
     companion object {
 
-        private const val TIFFANY =
-            "#00BCD4"
+        private const val TIFFANY = "#00BCD4"
+        private const val DARK = "#151515"
 
-        private const val DARK =
-            "#151515"
-
-        private const val RED =
-            "#D32F2F"
-
-        private const val GREEN =
-            "#1B5E20"
-
-        private const val REQUEST_LOCATION =
-            100
-
-        private const val REQUEST_NOTIFICATIONS =
-            101
+        private const val REQUEST_LOCATION = 100
+        private const val REQUEST_NOTIFICATIONS = 101
 
         private const val PREF_AUTO_TRACKING =
             "auto_tracking_enabled"
@@ -132,9 +95,7 @@ class MainActivity : Activity() {
                         )
 
                     speedText.text =
-                        "%.1f km/h".format(
-                            speed
-                        )
+                        "%.1f km/h".format(speed)
 
                     refreshData()
 
@@ -151,9 +112,7 @@ class MainActivity : Activity() {
                             LocationTrackingService.EXTRA_STATUS
                         ) ?: return
 
-                    updateStatus(
-                        status
-                    )
+                    updateStatus(status)
 
                     val speed =
                         intent.getDoubleExtra(
@@ -161,15 +120,8 @@ class MainActivity : Activity() {
                             0.0
                         )
 
-                    if (
-                        speed >= 0.0
-                    ) {
-
-                        speedText.text =
-                            "%.1f km/h".format(
-                                speed
-                            )
-                    }
+                    speedText.text =
+                        "%.1f km/h".format(speed)
 
                     refreshData()
                 }
@@ -180,9 +132,7 @@ class MainActivity : Activity() {
         savedInstanceState: Bundle?
     ) {
 
-        super.onCreate(
-            savedInstanceState
-        )
+        super.onCreate(savedInstanceState)
 
         database =
             OdometerDatabaseHelper(this)
@@ -199,9 +149,7 @@ class MainActivity : Activity() {
         val scroll =
             ScrollView(this)
 
-        scroll.setBackgroundColor(
-            Color.BLACK
-        )
+        scroll.setBackgroundColor(Color.BLACK)
 
         val root =
             LinearLayout(this)
@@ -214,22 +162,17 @@ class MainActivity : Activity() {
 
         root.setPadding(
             20,
-            45,
+            40,
             20,
             40
         )
 
         root.addView(
-            createTitle(
-                "BACKGROUND ODOMETER"
-            ),
+            createTitle("BACKGROUND ODOMETER"),
             wrapParams()
         )
 
-        addSpace(
-            root,
-            22
-        )
+        addSpace(root, 22)
 
         root.addView(
             createLabel(
@@ -239,53 +182,30 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            4
-        )
-
         totalText =
-            createLargeValue(
-                "0.00 km"
-            )
+            createLargeValue("0.00 km")
 
         root.addView(
             totalText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            24
-        )
+        addSpace(root, 20)
 
         root.addView(
-            createLabel(
-                "TODAY",
-                "#888888"
-            ),
+            createLabel("TODAY", "#888888"),
             wrapParams()
         )
 
-        addSpace(
-            root,
-            3
-        )
-
         todayText =
-            createMediumValue(
-                "0.00 km"
-            )
+            createMediumValue("0.00 km")
 
         root.addView(
             todayText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            24
-        )
+        addSpace(root, 20)
 
         root.addView(
             createLabel(
@@ -295,25 +215,15 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            3
-        )
-
         speedText =
-            createMediumValue(
-                "0.0 km/h"
-            )
+            createMediumValue("0.0 km/h")
 
         root.addView(
             speedText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            18
-        )
+        addSpace(root, 15)
 
         val speedRow =
             LinearLayout(this)
@@ -357,10 +267,7 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            25
-        )
+        addSpace(root, 22)
 
         statusText =
             TextView(this)
@@ -368,41 +275,25 @@ class MainActivity : Activity() {
         statusText.text =
             "GPS STATUS\nREADY"
 
-        statusText.textSize =
-            16f
-
-        statusText.setTextColor(
-            Color.LTGRAY
-        )
-
-        statusText.gravity =
-            Gravity.CENTER
+        statusText.textSize = 16f
+        statusText.setTextColor(Color.LTGRAY)
+        statusText.gravity = Gravity.CENTER
 
         root.addView(
             statusText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            18
-        )
+        addSpace(root, 15)
 
         trackingButton =
-            createAction(
-                "START TRACKING"
-            )
+            createAction("START TRACKING")
 
         trackingButton.setOnClickListener {
 
-            if (
-                trackingActive
-            ) {
-
+            if (trackingActive) {
                 stopTracking()
-
             } else {
-
                 startTracking()
             }
         }
@@ -412,35 +303,24 @@ class MainActivity : Activity() {
             fullParams(62)
         )
 
-        addSpace(
-            root,
-            10
-        )
+        addSpace(root, 10)
 
         val refresh =
-            createAction(
-                "REFRESH"
-            )
+            createAction("REFRESH")
 
         refresh.setOnClickListener {
-
             refreshData()
         }
 
         root.addView(
             refresh,
-            fullParams(62)
+            fullParams(58)
         )
 
-        addSpace(
-            root,
-            10
-        )
+        addSpace(root, 10)
 
         val trips =
-            createAction(
-                "TRIPS"
-            )
+            createAction("TRIPS")
 
         trips.setOnClickListener {
 
@@ -454,17 +334,30 @@ class MainActivity : Activity() {
 
         root.addView(
             trips,
-            fullParams(62)
+            fullParams(58)
         )
 
-        addSpace(
-            root,
-            25
+        addSpace(root, 10)
+
+        val days =
+            createAction("DAYS")
+
+        days.setOnClickListener {
+
+            startActivity(
+                Intent(
+                    this,
+                    DaysActivity::class.java
+                )
+            )
+        }
+
+        root.addView(
+            days,
+            fullParams(58)
         )
 
-        /*
-         * FUEL SECTION
-         */
+        addSpace(root, 25)
 
         root.addView(
             createLabel(
@@ -474,123 +367,110 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            8
-        )
+        addSpace(root, 5)
 
         fuelText =
-            createMediumValue(
-                "0.0 L"
-            )
+            createMediumValue("0.00 L")
 
         root.addView(
             fuelText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            15
-        )
-
-        val fuelInfoRow =
-            LinearLayout(this)
-
-        fuelInfoRow.orientation =
-            LinearLayout.HORIZONTAL
-
-        fuelInfoRow.gravity =
-            Gravity.CENTER
-
-        val mileageColumn =
-            createStatColumn(
-                "MILEAGE",
-                "0.0 km/L"
-            )
+        addSpace(root, 5)
 
         mileageText =
-            mileageColumn.second
-
-        val rangeColumn =
-            createStatColumn(
-                "OVERALL RANGE",
-                "0 km"
+            createLabel(
+                "Mileage: --",
+                "#AAAAAA"
             )
+
+        root.addView(
+            mileageText,
+            wrapParams()
+        )
+
+        addSpace(root, 5)
 
         rangeText =
-            rangeColumn.second
-
-        fuelInfoRow.addView(
-            mileageColumn.first,
-            halfParams()
-        )
-
-        fuelInfoRow.addView(
-            rangeColumn.first,
-            halfParams()
-        )
-
-        root.addView(
-            fuelInfoRow,
-            wrapParams()
-        )
-
-        addSpace(
-            root,
-            15
-        )
-
-        reserveText =
             createLabel(
-                "RESERVE: 0.0 L",
-                "#888888"
+                "Overall range: --",
+                "#AAAAAA"
             )
 
         root.addView(
-            reserveText,
+            rangeText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            10
-        )
+        addSpace(root, 3)
 
-        reserveButton =
-            createAction(
-                "RESERVE NOT REACHED"
+        reserveRangeText =
+            createLabel(
+                "Range until reserve: --",
+                "#AAAAAA"
             )
 
         root.addView(
-            reserveButton,
-            fullParams(58)
+            reserveRangeText,
+            wrapParams()
         )
 
-        addSpace(
-            root,
-            10
-        )
+        addSpace(root, 12)
 
-        val fuelButton =
-            createAction(
-                "FUEL"
+        reserveReachedButton =
+            createStatusButton(
+                "RESERVE REACHED",
+                false
             )
 
-        fuelButton.setOnClickListener {
+        root.addView(
+            reserveReachedButton,
+            fullParams(54)
+        )
 
+        addSpace(root, 8)
+
+        reserveCrossedButton =
+            createStatusButton(
+                "RESERVE CROSSED",
+                false
+            )
+
+        root.addView(
+            reserveCrossedButton,
+            fullParams(54)
+        )
+
+        addSpace(root, 10)
+
+        val fuel =
+            createAction("FUEL")
+
+        fuel.setOnClickListener {
             showFuelMenu()
         }
 
         root.addView(
-            fuelButton,
-            fullParams(62)
+            fuel,
+            fullParams(58)
         )
 
-        addSpace(
-            root,
-            30
+        addSpace(root, 10)
+
+        val history =
+            createAction("FUEL HISTORY")
+
+        history.setOnClickListener {
+            showFuelHistory()
+        }
+
+        root.addView(
+            history,
+            fullParams(58)
         )
+
+        addSpace(root, 25)
 
         root.addView(
             createLabel(
@@ -600,28 +480,17 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            5
-        )
-
         lastTripText =
-            createMediumValue(
-                "No trips yet"
-            )
+            createMediumValue("No trips yet")
 
-        lastTripText.textSize =
-            20f
+        lastTripText.textSize = 20f
 
         root.addView(
             lastTripText,
             wrapParams()
         )
 
-        addSpace(
-            root,
-            25
-        )
+        addSpace(root, 25)
 
         root.addView(
             createLabel(
@@ -629,11 +498,6 @@ class MainActivity : Activity() {
                 "#888888"
             ),
             wrapParams()
-        )
-
-        addSpace(
-            root,
-            5
         )
 
         val threshold =
@@ -648,10 +512,7 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            root,
-            35
-        )
+        addSpace(root, 35)
 
         root.addView(
             createLabel(
@@ -669,44 +530,29 @@ class MainActivity : Activity() {
             )
         )
 
-        setContentView(
-            scroll
-        )
+        setContentView(scroll)
     }
-
-    /*
-     * --------------------------------------------------
-     * FUEL MENU
-     * --------------------------------------------------
-     */
 
     private fun showFuelMenu() {
 
         val options =
             arrayOf(
                 "ADD FUEL",
-                "FUEL HISTORY",
-                "TANK & RESERVE SETTINGS"
+                "FUEL SETTINGS",
+                "FUEL HISTORY"
             )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "FUEL"
-            )
-            .setItems(
-                options
-            ) { _, which ->
+            .setTitle("FUEL")
+            .setItems(options) { _, which ->
 
                 when (which) {
 
-                    0 ->
-                        showAddFuelDialog()
+                    0 -> showAddFuelDialog()
 
-                    1 ->
-                        showFuelHistory()
+                    1 -> showFuelSettingsDialog()
 
-                    2 ->
-                        showFuelSettings()
+                    2 -> showFuelHistory()
                 }
             }
             .show()
@@ -714,73 +560,47 @@ class MainActivity : Activity() {
 
     private fun showAddFuelDialog() {
 
-        val container =
+        val layout =
             LinearLayout(this)
 
-        container.orientation =
+        layout.orientation =
             LinearLayout.VERTICAL
 
-        container.setPadding(
-            40,
+        layout.setPadding(
+            35,
             10,
-            40,
-            5
+            35,
+            10
         )
 
-        val litresInput =
+        val litres =
             EditText(this)
 
-        litresInput.hint =
+        litres.hint =
             "Litres added"
 
-        litresInput.inputType =
-            android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        litres.inputType =
+            2 or 8192
 
-        container.addView(
-            litresInput,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+        layout.addView(
+            litres,
+            wrapParams()
         )
 
-        val noteInput =
+        val note =
             EditText(this)
 
-        noteInput.hint =
+        note.hint =
             "Note (optional)"
 
-        container.addView(
-            noteInput,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+        layout.addView(
+            note,
+            wrapParams()
         )
 
-        val currentFuel =
-            database.getCurrentFuel()
-
-        val reserve =
-            database.getReserveFuel()
-
-        val oldInReserve =
-            currentFuel <= reserve
-
         AlertDialog.Builder(this)
-            .setTitle(
-                "ADD FUEL"
-            )
-            .setMessage(
-                "Current fuel: %.2f L\nReserve: %.2f L".format(
-                    currentFuel,
-                    reserve
-                )
-            )
-            .setView(
-                container
-            )
+            .setTitle("ADD FUEL")
+            .setView(layout)
             .setNegativeButton(
                 "CANCEL",
                 null
@@ -789,150 +609,91 @@ class MainActivity : Activity() {
                 "ADD"
             ) { _, _ ->
 
-                val litres =
-                    litresInput.text
+                val amount =
+                    litres.text
                         .toString()
                         .toDoubleOrNull()
 
                 if (
-                    litres == null ||
-                    litres <= 0.0
+                    amount == null ||
+                    amount <= 0.0
                 ) {
 
                     Toast.makeText(
                         this,
-                        "Enter a valid fuel amount",
-                        Toast.LENGTH_LONG
+                        "Enter valid litres",
+                        Toast.LENGTH_SHORT
                     ).show()
 
                     return@setPositiveButton
                 }
 
-                val record =
-                    database.addFuelRecord(
-                        litres,
-                        noteInput.text
-                            .toString()
-                    )
-
-                if (
-                    record == null
-                ) {
-
-                    Toast.makeText(
-                        this,
-                        "Could not save fuel",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    return@setPositiveButton
-                }
-
-                val newFuel =
-                    database.getCurrentFuel()
-
-                if (
-                    oldInReserve &&
-                    newFuel > reserve
-                ) {
-
-                    showReserveCrossed()
-
-                } else {
-
-                    Toast.makeText(
-                        this,
-                        "Fuel added: %.2f L".format(
-                            litres
-                        ),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                database.addFuel(
+                    amount,
+                    note.text.toString()
+                )
 
                 refreshData()
             }
             .show()
     }
 
-    private fun showReserveCrossed() {
+    private fun showFuelSettingsDialog() {
 
-        Toast.makeText(
-            this,
-            "RESERVE CROSSED",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-
-    private fun showFuelSettings() {
-
-        val container =
+        val layout =
             LinearLayout(this)
 
-        container.orientation =
+        layout.orientation =
             LinearLayout.VERTICAL
 
-        container.setPadding(
-            40,
+        layout.setPadding(
+            35,
             10,
-            40,
-            5
+            35,
+            10
         )
 
-        val capacityInput =
+        val tank =
             EditText(this)
 
-        capacityInput.hint =
+        tank.hint =
             "Tank capacity (L)"
 
-        capacityInput.setText(
-            "%.2f".format(
-                database.getTankCapacity()
-            )
+        tank.setText(
+            database.getTankCapacity()
+                .toString()
         )
 
-        capacityInput.inputType =
-            android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        tank.inputType =
+            2 or 8192
 
-        container.addView(
-            capacityInput,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+        layout.addView(
+            tank,
+            wrapParams()
         )
 
-        val reserveInput =
+        val reserve =
             EditText(this)
 
-        reserveInput.hint =
+        reserve.hint =
             "Reserve fuel (L)"
 
-        reserveInput.setText(
-            "%.2f".format(
-                database.getReserveFuel()
-            )
+        reserve.setText(
+            database.getReserveFuel()
+                .toString()
         )
 
-        reserveInput.inputType =
-            android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        reserve.inputType =
+            2 or 8192
 
-        container.addView(
-            reserveInput,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+        layout.addView(
+            reserve,
+            wrapParams()
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "TANK & RESERVE"
-            )
-            .setView(
-                container
-            )
+            .setTitle("FUEL SETTINGS")
+            .setView(layout)
             .setNegativeButton(
                 "CANCEL",
                 null
@@ -941,60 +702,39 @@ class MainActivity : Activity() {
                 "SAVE"
             ) { _, _ ->
 
-                val capacity =
-                    capacityInput.text
+                val tankValue =
+                    tank.text
                         .toString()
                         .toDoubleOrNull()
 
-                val reserve =
-                    reserveInput.text
+                val reserveValue =
+                    reserve.text
                         .toString()
                         .toDoubleOrNull()
 
                 if (
-                    capacity == null ||
-                    capacity <= 0.0
+                    tankValue == null ||
+                    reserveValue == null ||
+                    tankValue <= 0 ||
+                    reserveValue < 0 ||
+                    reserveValue >= tankValue
                 ) {
 
                     Toast.makeText(
                         this,
-                        "Invalid tank capacity",
-                        Toast.LENGTH_LONG
+                        "Invalid fuel settings",
+                        Toast.LENGTH_SHORT
                     ).show()
 
                     return@setPositiveButton
                 }
 
-                if (
-                    reserve == null ||
-                    reserve < 0.0 ||
-                    reserve > capacity
-                ) {
-
-                    Toast.makeText(
-                        this,
-                        "Invalid reserve amount",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    return@setPositiveButton
-                }
-
-                database.setTankCapacity(
-                    capacity
-                )
-
-                database.setReserveFuel(
-                    reserve
+                database.setFuelSettings(
+                    tankValue,
+                    reserveValue
                 )
 
                 refreshData()
-
-                Toast.makeText(
-                    this,
-                    "Fuel settings saved",
-                    Toast.LENGTH_LONG
-                ).show()
             }
             .show()
     }
@@ -1004,17 +744,11 @@ class MainActivity : Activity() {
         val records =
             database.getFuelRecords()
 
-        if (
-            records.isEmpty()
-        ) {
+        if (records.isEmpty()) {
 
             AlertDialog.Builder(this)
-                .setTitle(
-                    "FUEL HISTORY"
-                )
-                .setMessage(
-                    "No fuel records yet."
-                )
+                .setTitle("FUEL HISTORY")
+                .setMessage("No fuel records yet.")
                 .setPositiveButton(
                     "OK",
                     null
@@ -1024,76 +758,140 @@ class MainActivity : Activity() {
             return
         }
 
-        val items =
-            records.map {
+        val layout =
+            LinearLayout(this)
 
-                val date =
-                    SimpleDateFormat(
-                        "dd/MM/yyyy HH:mm",
-                        Locale.getDefault()
-                    ).format(
-                        Date(it.time)
-                    )
+        layout.orientation =
+            LinearLayout.VERTICAL
 
-                "$date\n" +
-                    "+%.2f L  •  %.2f L remaining\n" +
-                    "Odometer: %.2f km".format(
-                        it.litresAdded,
-                        it.fuelAfterLitres,
-                        it.odometerKm
-                    )
-            }.toTypedArray()
+        val scroll =
+            ScrollView(this)
 
-        AlertDialog.Builder(this)
-            .setTitle(
-                "FUEL HISTORY"
+        for (record in records) {
+
+            val row =
+                LinearLayout(this)
+
+            row.orientation =
+                LinearLayout.VERTICAL
+
+            row.setPadding(
+                15,
+                15,
+                15,
+                15
             )
-            .setItems(
-                items
-            ) { _, which ->
 
-                val selected =
-                    records[which]
+            val date =
+                SimpleDateFormat(
+                    "dd MMM yyyy hh:mm a",
+                    Locale.getDefault()
+                ).format(
+                    Date(record.time)
+                )
 
-                showFuelRecordOptions(
-                    selected
+            val text =
+                TextView(this)
+
+            text.text =
+                "$date\n" +
+                    "+%.2f L   •   Fuel after %.2f L\n".format(
+                        record.litresAdded,
+                        record.fuelAfterLitres
+                    ) +
+                    if (
+                        record.note.isNotBlank()
+                    ) {
+                        record.note
+                    } else {
+                        ""
+                    }
+
+            text.textSize = 15f
+            text.setTextColor(Color.WHITE)
+
+            row.addView(
+                text,
+                wrapParams()
+            )
+
+            val buttons =
+                LinearLayout(this)
+
+            buttons.orientation =
+                LinearLayout.HORIZONTAL
+
+            val edit =
+                createAction("EDIT")
+
+            edit.setOnClickListener {
+
+                showEditFuelDialog(
+                    record
                 )
             }
-            .setNegativeButton(
+
+            val delete =
+                createAction("DELETE")
+
+            delete.setOnClickListener {
+
+                AlertDialog.Builder(this)
+                    .setTitle("DELETE FUEL?")
+                    .setMessage(
+                        "Delete this fuel record?"
+                    )
+                    .setNegativeButton(
+                        "CANCEL",
+                        null
+                    )
+                    .setPositiveButton(
+                        "DELETE"
+                    ) { _, _ ->
+
+                        database.deleteFuel(
+                            record.id
+                        )
+
+                        refreshData()
+
+                        showFuelHistory()
+                    }
+                    .show()
+            }
+
+            buttons.addView(
+                edit,
+                halfParams()
+            )
+
+            buttons.addView(
+                delete,
+                halfParams()
+            )
+
+            row.addView(
+                buttons,
+                wrapParams()
+            )
+
+            layout.addView(
+                row,
+                wrapParams()
+            )
+        }
+
+        scroll.addView(
+            layout
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("FUEL HISTORY")
+            .setView(scroll)
+            .setPositiveButton(
                 "CLOSE",
                 null
             )
-            .show()
-    }
-
-    private fun showFuelRecordOptions(
-        record: FuelRecord
-    ) {
-
-        AlertDialog.Builder(this)
-            .setTitle(
-                "FUEL RECORD"
-            )
-            .setItems(
-                arrayOf(
-                    "EDIT",
-                    "DELETE"
-                )
-            ) { _, which ->
-
-                when (which) {
-
-                    0 ->
-                        showEditFuelDialog(
-                            record
-                        )
-
-                    1 ->
-                        confirmDeleteFuel(
-                            record
-                        )
-                }
-            }
             .show()
     }
 
@@ -1101,57 +899,49 @@ class MainActivity : Activity() {
         record: FuelRecord
     ) {
 
-        val container =
+        val layout =
             LinearLayout(this)
 
-        container.orientation =
+        layout.orientation =
             LinearLayout.VERTICAL
 
-        container.setPadding(
-            40,
+        layout.setPadding(
+            35,
             10,
-            40,
-            5
+            35,
+            10
         )
 
-        val litresInput =
+        val litres =
             EditText(this)
 
-        litresInput.setText(
-            "%.2f".format(
-                record.litresAdded
-            )
+        litres.setText(
+            record.litresAdded.toString()
         )
 
-        litresInput.inputType =
-            android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        litres.inputType =
+            2 or 8192
 
-        container.addView(
-            litresInput
+        layout.addView(
+            litres,
+            wrapParams()
         )
 
-        val noteInput =
+        val note =
             EditText(this)
 
-        noteInput.hint =
-            "Note"
-
-        noteInput.setText(
+        note.setText(
             record.note
         )
 
-        container.addView(
-            noteInput
+        layout.addView(
+            note,
+            wrapParams()
         )
 
         AlertDialog.Builder(this)
-            .setTitle(
-                "EDIT FUEL"
-            )
-            .setView(
-                container
-            )
+            .setTitle("EDIT FUEL")
+            .setView(layout)
             .setNegativeButton(
                 "CANCEL",
                 null
@@ -1160,89 +950,40 @@ class MainActivity : Activity() {
                 "SAVE"
             ) { _, _ ->
 
-                val litres =
-                    litresInput.text
+                val value =
+                    litres.text
                         .toString()
                         .toDoubleOrNull()
 
                 if (
-                    litres == null ||
-                    litres <= 0.0
+                    value == null ||
+                    value <= 0
                 ) {
-
-                    Toast.makeText(
-                        this,
-                        "Invalid fuel amount",
-                        Toast.LENGTH_LONG
-                    ).show()
-
                     return@setPositiveButton
                 }
 
-                database.updateFuelRecord(
+                database.updateFuel(
                     record.id,
-                    litres,
-                    noteInput.text.toString()
+                    value,
+                    note.text.toString()
                 )
 
                 refreshData()
-            }
-            .show()
-    }
-
-    private fun confirmDeleteFuel(
-        record: FuelRecord
-    ) {
-
-        AlertDialog.Builder(this)
-            .setTitle(
-                "DELETE FUEL RECORD?"
-            )
-            .setMessage(
-                "+%.2f L fuel record".format(
-                    record.litresAdded
-                )
-            )
-            .setNegativeButton(
-                "CANCEL",
-                null
-            )
-            .setPositiveButton(
-                "DELETE"
-            ) { _, _ ->
-
-                database.deleteFuelRecord(
-                    record.id
-                )
-
-                refreshData()
-
-                Toast.makeText(
-                    this,
-                    "Fuel record deleted",
-                    Toast.LENGTH_LONG
-                ).show()
             }
             .show()
     }
 
     private fun startTracking() {
 
-        if (
-            !hasLocationPermission()
-        ) {
+        if (!hasLocationPermission()) {
 
             requestLocationPermission()
-
             return
         }
 
-        if (
-            !notificationsAllowed()
-        ) {
+        if (!notificationsAllowed()) {
 
             requestNotificationPermission()
-
             return
         }
 
@@ -1253,29 +994,23 @@ class MainActivity : Activity() {
             )
             .apply()
 
-        val intent =
-            Intent(
-                this,
-                LocationTrackingService::class.java
-            )
-
         try {
 
             ContextCompat.startForegroundService(
                 this,
-                intent
+                Intent(
+                    this,
+                    LocationTrackingService::class.java
+                )
             )
 
-            trackingActive =
-                true
+            trackingActive = true
 
             trackingButton.text =
                 "STOP TRACKING"
 
             trackingButton.background =
-                buttonBackground(
-                    true
-                )
+                buttonBackground(true)
 
             updateStatusFromCurrentGps()
 
@@ -1290,15 +1025,7 @@ class MainActivity : Activity() {
                 )
                 .apply()
 
-            trackingActive =
-                false
-
-            statusText.text =
-                "GPS STATUS\nUNABLE TO START"
-
-            statusText.setTextColor(
-                Color.RED
-            )
+            trackingActive = false
 
             Toast.makeText(
                 this,
@@ -1327,31 +1054,20 @@ class MainActivity : Activity() {
             LocationTrackingService.ACTION_STOP
 
         try {
-
-            startService(
-                intent
-            )
-
+            startService(intent)
         } catch (_: Exception) {
         }
 
-        trackingActive =
-            false
+        trackingActive = false
 
         trackingButton.text =
             "START TRACKING"
 
         trackingButton.background =
-            buttonBackground(
-                false
-            )
+            buttonBackground(false)
 
         statusText.text =
             "GPS STATUS\nTRACKING STOPPED"
-
-        statusText.setTextColor(
-            Color.LTGRAY
-        )
 
         speedText.text =
             "0.0 km/h"
@@ -1361,9 +1077,7 @@ class MainActivity : Activity() {
 
     private fun updateStatusFromCurrentGps() {
 
-        if (
-            !isLocationEnabled()
-        ) {
+        if (!isLocationEnabled()) {
 
             updateStatus(
                 "GPS OFF\nWAITING"
@@ -1387,27 +1101,19 @@ class MainActivity : Activity() {
         val lower =
             status.lowercase()
 
-        if (
-            lower.contains("tracking") ||
-            lower.contains("gps on")
-        ) {
-
-            statusText.setTextColor(
-                Color.parseColor(
-                    TIFFANY
-                )
-            )
-
-        } else {
-
-            statusText.setTextColor(
+        statusText.setTextColor(
+            if (
+                lower.contains("tracking") ||
+                lower.contains("gps on")
+            ) {
+                Color.parseColor(TIFFANY)
+            } else {
                 Color.LTGRAY
-            )
-        }
+            }
+        )
     }
 
-    private fun isLocationEnabled():
-        Boolean {
+    private fun isLocationEnabled(): Boolean {
 
         val manager =
             getSystemService(
@@ -1420,11 +1126,8 @@ class MainActivity : Activity() {
                 Build.VERSION.SDK_INT >=
                 Build.VERSION_CODES.P
             ) {
-
-                manager.isLocationEnabled()
-
+                manager.isLocationEnabled
             } else {
-
                 manager.isProviderEnabled(
                     android.location.LocationManager.GPS_PROVIDER
                 ) ||
@@ -1434,9 +1137,129 @@ class MainActivity : Activity() {
             }
 
         } catch (_: Exception) {
-
             false
         }
+    }
+
+    private fun refreshData() {
+
+        totalText.text =
+            "%.2f km".format(
+                database.getTotalOdometer()
+            )
+
+        todayText.text =
+            "%.2f km".format(
+                database.getTodayDistance()
+            )
+
+        val trip =
+            database.getLastCompletedTrip()
+
+        if (trip == null) {
+
+            lastTripText.text =
+                "No trips yet"
+
+            averageText.text =
+                "0.0 km/h"
+
+            maxText.text =
+                "0.0 km/h"
+
+        } else {
+
+            lastTripText.text =
+                "%.2f km".format(
+                    trip.distanceKm
+                )
+
+            averageText.text =
+                "%.1f km/h".format(
+                    trip.averageSpeed
+                )
+
+            maxText.text =
+                "%.1f km/h".format(
+                    trip.maxSpeed
+                )
+        }
+
+        val fuel =
+            database.getCurrentFuel()
+
+        fuelText.text =
+            "%.2f L / %.2f L".format(
+                fuel,
+                database.getTankCapacity()
+            )
+
+        val mileage =
+            database.getAverageMileage()
+
+        mileageText.text =
+            if (mileage > 0) {
+                "Mileage: %.2f km/L".format(
+                    mileage
+                )
+            } else {
+                "Mileage: --"
+            }
+
+        val overallRange =
+            database.getOverallRange()
+
+        rangeText.text =
+            if (mileage > 0) {
+                "Overall range: %.1f km".format(
+                    overallRange
+                )
+            } else {
+                "Overall range: --"
+            }
+
+        val reserveRange =
+            database.getRangeToReserve()
+
+        reserveRangeText.text =
+            if (mileage > 0) {
+                "Range until reserve: %.1f km".format(
+                    reserveRange
+                )
+            } else {
+                "Range until reserve: --"
+            }
+
+        val reached =
+            database.isReserveReached()
+
+        reserveReachedButton.background =
+            statusButtonBackground(
+                reached
+            )
+
+        reserveReachedButton.setTextColor(
+            if (reached) {
+                Color.WHITE
+            } else {
+                Color.GRAY
+            }
+        )
+
+        val crossed =
+            database.isReserveCrossed()
+
+        reserveCrossedButton.background =
+            statusButtonBackground(
+                crossed
+            )
+
+        reserveCrossedButton.setTextColor(
+            if (crossed) {
+                Color.WHITE
+            } else {
+                Color.GRAY
+            )
     }
 
     private fun showBackgroundLocationHintOnce() {
@@ -1504,9 +1327,7 @@ class MainActivity : Activity() {
                             "package:$packageName"
                         )
 
-                    startActivity(
-                        intent
-                    )
+                    startActivity(intent)
 
                 } catch (_: Exception) {
                 }
@@ -1514,20 +1335,16 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun notificationsAllowed():
-        Boolean {
+    private fun notificationsAllowed(): Boolean {
 
         return if (
             Build.VERSION.SDK_INT >=
             Build.VERSION_CODES.TIRAMISU
         ) {
-
             NotificationManagerCompat
                 .from(this)
                 .areNotificationsEnabled()
-
         } else {
-
             true
         }
     }
@@ -1554,14 +1371,11 @@ class MainActivity : Activity() {
                     ),
                     REQUEST_NOTIFICATIONS
                 )
-
             } else {
-
                 openNotificationSettings()
             }
 
         } else {
-
             openNotificationSettings()
         }
     }
@@ -1580,147 +1394,9 @@ class MainActivity : Activity() {
                 packageName
             )
 
-            startActivity(
-                intent
-            )
+            startActivity(intent)
 
         } catch (_: Exception) {
-        }
-    }
-
-    private fun refreshData() {
-
-        totalText.text =
-            "%.2f km".format(
-                database.getTotalOdometer()
-            )
-
-        todayText.text =
-            "%.2f km".format(
-                database.getTodayDistance()
-            )
-
-        val trip =
-            database.getLastCompletedTrip()
-
-        if (
-            trip == null
-        ) {
-
-            lastTripText.text =
-                "No trips yet"
-
-            averageText.text =
-                "0.0 km/h"
-
-            maxText.text =
-                "0.0 km/h"
-
-        } else {
-
-            lastTripText.text =
-                "%.2f km".format(
-                    trip.distanceKm
-                )
-
-            averageText.text =
-                "%.1f km/h".format(
-                    trip.averageSpeed
-                )
-
-            maxText.text =
-                "%.1f km/h".format(
-                    trip.maxSpeed
-                )
-        }
-
-        /*
-         * FUEL INFORMATION
-         */
-
-        val currentFuel =
-            database.getCurrentFuel()
-
-        val mileage =
-            database.getAverageMileage()
-
-        val overallRange =
-            database.getOverallRangeKm()
-
-        val reserve =
-            database.getReserveFuel()
-
-        val tankCapacity =
-            database.getTankCapacity()
-
-        fuelText.text =
-            "%.2f L / %.2f L".format(
-                currentFuel,
-                tankCapacity
-            )
-
-        mileageText.text =
-            if (
-                mileage > 0.0
-            ) {
-
-                "%.1f km/L".format(
-                    mileage
-                )
-
-            } else {
-
-                "--"
-            }
-
-        rangeText.text =
-            if (
-                overallRange > 0.0
-            ) {
-
-                "%.0f km".format(
-                    overallRange
-                )
-
-            } else {
-
-                "--"
-            }
-
-        reserveText.text =
-            "RESERVE: %.2f L".format(
-                reserve
-            )
-
-        if (
-            currentFuel <= reserve
-        ) {
-
-            reserveButton.text =
-                "RESERVE REACHED"
-
-            reserveButton.background =
-                buttonBackground(
-                    true
-                )
-
-            reserveButton.setTextColor(
-                Color.WHITE
-            )
-
-        } else {
-
-            reserveButton.text =
-                "RESERVE NOT REACHED"
-
-            reserveButton.background =
-                buttonBackground(
-                    false
-                )
-
-            reserveButton.setTextColor(
-                Color.WHITE
-            )
         }
     }
 
@@ -1745,8 +1421,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun hasLocationPermission():
-        Boolean {
+    private fun hasLocationPermission(): Boolean {
 
         return ContextCompat.checkSelfPermission(
             this,
@@ -1772,24 +1447,15 @@ class MainActivity : Activity() {
             REQUEST_NOTIFICATIONS
         ) {
 
-            if (
-                notificationsAllowed()
-            ) {
-
-                Toast.makeText(
-                    this,
-                    "Notifications enabled. Tap START TRACKING again.",
-                    Toast.LENGTH_LONG
-                ).show()
-
-            } else {
-
-                Toast.makeText(
-                    this,
-                    "Please allow Background Odometer notifications.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            Toast.makeText(
+                this,
+                if (notificationsAllowed()) {
+                    "Notifications enabled."
+                } else {
+                    "Please allow notifications."
+                },
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -1799,21 +1465,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
-
-            textSize =
-                25f
-
-            setTextColor(
-                Color.WHITE
-            )
-
-            typeface =
-                Typeface.DEFAULT_BOLD
-
-            gravity =
-                Gravity.CENTER
+            this.text = text
+            textSize = 25f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
         }
     }
 
@@ -1824,20 +1480,12 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
-
-            textSize =
-                15f
-
+            this.text = text
+            textSize = 15f
             setTextColor(
-                Color.parseColor(
-                    color
-                )
+                Color.parseColor(color)
             )
-
-            gravity =
-                Gravity.CENTER
+            gravity = Gravity.CENTER
         }
     }
 
@@ -1847,21 +1495,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
-
-            textSize =
-                46f
-
-            setTextColor(
-                Color.WHITE
-            )
-
-            typeface =
-                Typeface.DEFAULT_BOLD
-
-            gravity =
-                Gravity.CENTER
+            this.text = text
+            textSize = 46f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
         }
     }
 
@@ -1871,21 +1509,11 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
-
-            textSize =
-                25f
-
-            setTextColor(
-                Color.WHITE
-            )
-
-            typeface =
-                Typeface.DEFAULT_BOLD
-
-            gravity =
-                Gravity.CENTER
+            this.text = text
+            textSize = 25f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
         }
     }
 
@@ -1911,18 +1539,10 @@ class MainActivity : Activity() {
             wrapParams()
         )
 
-        addSpace(
-            column,
-            3
-        )
-
         val valueView =
-            createMediumValue(
-                value
-            )
+            createMediumValue(value)
 
-        valueView.textSize =
-            20f
+        valueView.textSize = 20f
 
         column.addView(
             valueView,
@@ -1941,29 +1561,30 @@ class MainActivity : Activity() {
 
         return TextView(this).apply {
 
-            this.text =
-                text
+            this.text = text
+            textSize = 17f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background =
+                buttonBackground(false)
+        }
+    }
 
-            textSize =
-                17f
+    private fun createStatusButton(
+        text: String,
+        active: Boolean
+    ): TextView {
 
-            setTextColor(
-                Color.WHITE
-            )
+        return TextView(this).apply {
 
-            typeface =
-                Typeface.DEFAULT_BOLD
-
-            gravity =
-                Gravity.CENTER
-
-            isClickable =
-                true
+            this.text = text
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
 
             background =
-                buttonBackground(
-                    false
-                )
+                statusButtonBackground(active)
         }
     }
 
@@ -1973,19 +1594,13 @@ class MainActivity : Activity() {
 
         return GradientDrawable().apply {
 
-            cornerRadius =
-                18f
+            cornerRadius = 18f
 
             setColor(
                 Color.parseColor(
-                    if (
-                        active
-                    ) {
-
+                    if (active) {
                         "#07383E"
-
                     } else {
-
                         DARK
                     }
                 )
@@ -1993,8 +1608,37 @@ class MainActivity : Activity() {
 
             setStroke(
                 2,
+                Color.parseColor(TIFFANY)
+            )
+        }
+    }
+
+    private fun statusButtonBackground(
+        active: Boolean
+    ): GradientDrawable {
+
+        return GradientDrawable().apply {
+
+            cornerRadius = 16f
+
+            setColor(
                 Color.parseColor(
-                    TIFFANY
+                    if (active) {
+                        "#07383E"
+                    } else {
+                        "#101010"
+                    }
+                )
+            )
+
+            setStroke(
+                2,
+                Color.parseColor(
+                    if (active) {
+                        TIFFANY
+                    } else {
+                        "#444444"
+                    }
                 )
             )
         }
@@ -2072,29 +1716,18 @@ class MainActivity : Activity() {
                 false
             )
 
-        if (
-            trackingActive
-        ) {
-
-            trackingButton.text =
+        trackingButton.text =
+            if (trackingActive) {
                 "STOP TRACKING"
-
-            trackingButton.background =
-                buttonBackground(
-                    true
-                )
-
-            updateStatusFromCurrentGps()
-
-        } else {
-
-            trackingButton.text =
+            } else {
                 "START TRACKING"
+            }
 
-            trackingButton.background =
-                buttonBackground(
-                    false
-                )
+        trackingButton.background =
+            buttonBackground(trackingActive)
+
+        if (trackingActive) {
+            updateStatusFromCurrentGps()
         }
 
         refreshData()
@@ -2103,11 +1736,9 @@ class MainActivity : Activity() {
     override fun onPause() {
 
         try {
-
             unregisterReceiver(
                 serviceReceiver
             )
-
         } catch (_: Exception) {
         }
 
@@ -2120,4 +1751,4 @@ class MainActivity : Activity() {
 
         super.onDestroy()
     }
-}
+            }
