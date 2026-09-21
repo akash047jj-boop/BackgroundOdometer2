@@ -262,6 +262,12 @@ class OdometerDatabaseHelper(
             )
         }
 
+        // V17: normalize legacy FUEL values. Existing fuel records are treated
+        // as ABOVE RESERVE unless they were already explicitly marked BELOW.
+        db.execSQL(
+            "UPDATE fuel_records SET fuel_status = 'ABOVE' WHERE fuel_status IS NULL OR fuel_status = '' OR fuel_status = 'FUEL'"
+        )
+
         setSettingIfMissing(
             db,
             "speed_threshold",
@@ -1268,7 +1274,8 @@ class OdometerDatabaseHelper(
 
     fun addFuel(
         litres: Double,
-        note: String
+        note: String,
+        fuelStatus: String = "ABOVE"
     ): Boolean {
 
         if (litres <= 0.0) {
@@ -1289,6 +1296,9 @@ class OdometerDatabaseHelper(
 
         val reserve =
             getReserveFuel()
+
+        val normalizedStatus =
+            if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE"
 
         val crossed =
             before <= reserve &&
@@ -1327,12 +1337,10 @@ class OdometerDatabaseHelper(
             if (crossed) 1 else 0
         )
 
-        // A normal refuelling event is never a below-reserve marker.
-        // Below-reserve points are created only by markCurrentFuelBelowReserve()
-        // when the rider confirms the moment the fuel actually reaches reserve.
+        // The rider explicitly chooses the fuel status after refuelling.
         values.put(
             "fuel_status",
-            "FUEL"
+            normalizedStatus
         )
 
         writableDatabase.insert(
@@ -1382,7 +1390,10 @@ class OdometerDatabaseHelper(
                         it.getDouble(4),
                         it.getString(5) ?: "",
                         it.getInt(6) != 0,
-                        it.getString(7)?.uppercase(Locale.getDefault()) ?: "ABOVE"
+                        when (it.getString(7)?.uppercase(Locale.getDefault())) {
+                            "BELOW" -> "BELOW"
+                            else -> "ABOVE"
+                        }
                     )
                 )
             }
@@ -1394,7 +1405,8 @@ class OdometerDatabaseHelper(
     fun updateFuel(
         id: Long,
         litres: Double,
-        note: String
+        note: String,
+        fuelStatus: String = "ABOVE"
     ): Boolean {
 
         if (litres <= 0.0) {
@@ -1417,7 +1429,7 @@ class OdometerDatabaseHelper(
         val values = ContentValues()
         values.put("litres_added", litres)
         values.put("note", note)
-        values.put("fuel_status", "FUEL")
+        values.put("fuel_status", if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE")
 
         val changed = writableDatabase.update(
             TABLE_FUEL,
@@ -1666,6 +1678,14 @@ class OdometerDatabaseHelper(
                 }
             }
 
+            // If the current BELOW point was created during refuelling, that
+            // fuel has just been added and must not be counted as fuel consumed
+            // during the cycle ending at this point. Zero-litre manual markers
+            // naturally contribute nothing here.
+            if (current.litresAdded > 0.0) {
+                fuelAdded -= current.litresAdded
+            }
+
             if (fuelAdded > 0.0) {
                 totalDistance += distance
                 totalFuel += fuelAdded
@@ -1708,35 +1728,50 @@ class OdometerDatabaseHelper(
 
     fun hasCurrentBelowReserveMarker(): Boolean {
         val latest = getFuelRecords().firstOrNull() ?: return false
-        return latest.litresAdded <= 0.0 &&
-            latest.fuelStatus.equals("BELOW", true)
+        return latest.fuelStatus.equals("BELOW", true)
     }
 
+    /**
+     * Saves a below-reserve point when the rider confirms it. This is deliberately
+     * allowed even when the calculated fuel estimate is still above reserve,
+     * because the rider's manual observation takes priority.
+     */
     fun markCurrentFuelBelowReserve(): Boolean {
-        if (!isReserveReached()) return false
         if (hasCurrentBelowReserveMarker()) return false
 
         val now = System.currentTimeMillis()
         val currentFuel = getCurrentFuel()
+        val markerFuel = minOf(currentFuel, getReserveFuel())
         val values = ContentValues()
         values.put("time", now)
         values.put("odometer_km", getTotalOdometer())
         values.put("litres_added", 0.0)
-        values.put("fuel_after_litres", currentFuel)
-        values.put("note", "Below-reserve mileage marker")
+        values.put("fuel_after_litres", markerFuel)
+        values.put("note", "Below-reserve mileage marker (rider confirmed)")
         values.put("reserve_crossed", 0)
         values.put("fuel_status", "BELOW")
         return writableDatabase.insert(TABLE_FUEL, null, values) != -1L
     }
 
-    fun isReserveReached(): Boolean {
-
-        return getCurrentFuel() <=
-            getReserveFuel()
+    /** True when the calculated fuel estimate has reached the configured reserve. */
+    fun isReserveReachedByCalculation(): Boolean {
+        return getCurrentFuel() <= getReserveFuel()
     }
 
+    /**
+     * User-selected status is primary, but automatic detection takes over once
+     * the calculated fuel level actually reaches reserve.
+     */
+    fun getCurrentFuelStatus(): String {
+        val latest = getFuelRecords().firstOrNull()
+        if (latest?.fuelStatus?.equals("BELOW", true) == true) return "BELOW"
+        return if (isReserveReachedByCalculation()) "BELOW" else "ABOVE"
+    }
+
+    fun isReserveReached(): Boolean = getCurrentFuelStatus() == "BELOW"
+
     fun isReserveCrossed(): Boolean {
-        return getCurrentFuel() <= getReserveFuel()
+        return getCurrentFuelStatus() == "BELOW"
     }
 
     fun setSpeedThreshold(value: Double) {
