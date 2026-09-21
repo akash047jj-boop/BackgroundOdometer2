@@ -11,10 +11,6 @@ android {
     compileSdk =
         35
 
-    buildFeatures {
-        buildConfig = true
-    }
-
     defaultConfig {
 
         applicationId =
@@ -27,16 +23,20 @@ android {
             35
 
         versionCode =
-            11
+            12
 
         versionName =
-            "11.0"
+            "12.0"
 
         buildConfigField(
             "String",
             "CARTO_API_KEY",
             "\"${System.getenv("CARTO_API_KEY") ?: ""}\""
         )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
