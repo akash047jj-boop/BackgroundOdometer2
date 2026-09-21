@@ -271,99 +271,208 @@ object MapMatchingHelper {
      * Removes GPS noise from the displayed/matched route while preserving
      * genuine slow movement. It does NOT apply the odometer speed threshold.
      */
+    /**
+     * Cleans the route for MAP DISPLAY / ROAD MATCHING.
+     *
+     * IMPORTANT:
+     * - This is deliberately independent of the odometer speed threshold.
+     * - We keep genuine vehicle movement even when it is below the odometer
+     *   threshold.
+     * - Stationary GPS drift is removed using a separate low-speed movement
+     *   filter and a minimum displacement test.
+     * - The raw database points are never modified.
+     */
     fun cleanRoutePoints(
         points: List<TrackPoint>
     ): List<TrackPoint> {
 
-        if (points.size <= 2) {
-            return points.filter {
-                it.latitude.isFinite() &&
-                    it.longitude.isFinite() &&
-                    (it.accuracy <= 0.0 || it.accuracy <= 75.0)
-            }
+        if (points.size < 2) {
+            return points.filter(::isUsablePoint)
         }
 
         val valid =
-            points.filter {
-                it.latitude.isFinite() &&
-                    it.longitude.isFinite() &&
-                    (it.accuracy <= 0.0 || it.accuracy <= 75.0)
-            }
+            points
+                .filter(::isUsablePoint)
+                .sortedBy { it.time }
 
         if (valid.size < 2) {
             return valid
         }
 
-        val result = ArrayList<TrackPoint>()
-        result.add(valid.first())
+        // First remove physically impossible GPS jumps.
+        val filtered = ArrayList<TrackPoint>()
+        filtered.add(valid.first())
 
-        for (i in 1 until valid.lastIndex) {
-            val point = valid[i]
-            val previous = result.last()
+        for (i in 1 until valid.size) {
+            val current = valid[i]
+            val previous = filtered.last()
+            val seconds = (current.time - previous.time) / 1000.0
 
-            val seconds =
-                (point.time - previous.time) / 1000.0
+            if (seconds <= 0.0) continue
 
-            if (seconds <= 0.0) {
+            val distance = haversine(
+                previous.latitude,
+                previous.longitude,
+                current.latitude,
+                current.longitude
+            )
+
+            val impliedSpeed = distance / seconds * 3.6
+
+            if (distance > 300.0 || impliedSpeed > 180.0) {
                 continue
             }
 
-            val distance =
+            filtered.add(current)
+        }
+
+        if (filtered.size < 2) {
+            return filtered
+        }
+
+        /*
+         * A separate route-display movement threshold.
+         * This is NOT the user's odometer threshold.
+         * 2 km/h is high enough to suppress most stationary GPS drift while
+         * still retaining very slow vehicle movement.
+         */
+        val routeMovementSpeed = 2.0
+        val minimumMovementMeters = 12.0
+        val strongMovementMeters = 25.0
+
+        val result = ArrayList<TrackPoint>()
+        result.add(filtered.first())
+
+        var lastMovementPoint = filtered.first()
+        var haveConfirmedMovement = false
+
+        for (i in 1 until filtered.lastIndex) {
+            val point = filtered[i]
+            val previous = filtered[i - 1]
+            val next = filtered[i + 1]
+
+            val prevSeconds = (point.time - previous.time) / 1000.0
+            val nextSeconds = (next.time - point.time) / 1000.0
+
+            val prevDistance = if (prevSeconds > 0.0) {
                 haversine(
                     previous.latitude,
                     previous.longitude,
                     point.latitude,
                     point.longitude
                 )
+            } else 0.0
 
-            val impliedSpeed =
-                distance / seconds * 3.6
-
-            // Reject impossible GPS jumps.
-            if (distance > 300.0 || impliedSpeed > 180.0) {
-                continue
-            }
-
-            val accuracy =
-                max(
-                    previous.accuracy.takeIf { it > 0.0 } ?: 10.0,
-                    point.accuracy.takeIf { it > 0.0 } ?: 10.0
-                )
-
-            val stationaryTolerance =
-                max(
-                    20.0,
-                    accuracy * 2.5
-                )
-
-            val stationaryNoise =
-                point.speedKmh < 2.0 &&
-                    previous.speedKmh < 2.0 &&
-                    distance < stationaryTolerance
-
-            if (!stationaryNoise) {
-                result.add(point)
-            }
-        }
-
-        val last = valid.last()
-        val previous = result.last()
-
-        if (last.id != previous.id) {
-            val distance =
+            val nextDistance = if (nextSeconds > 0.0) {
                 haversine(
-                    previous.latitude,
-                    previous.longitude,
-                    last.latitude,
-                    last.longitude
+                    point.latitude,
+                    point.longitude,
+                    next.latitude,
+                    next.longitude
                 )
+            } else 0.0
 
-            if (distance <= 300.0) {
-                result.add(last)
+            val prevSpeed = if (prevSeconds > 0.0) {
+                prevDistance / prevSeconds * 3.6
+            } else 0.0
+
+            val nextSpeed = if (nextSeconds > 0.0) {
+                nextDistance / nextSeconds * 3.6
+            } else 0.0
+
+            val gpsSpeed = point.speedKmh.coerceAtLeast(0.0)
+
+            val displacementFromMovementAnchor = haversine(
+                lastMovementPoint.latitude,
+                lastMovementPoint.longitude,
+                point.latitude,
+                point.longitude
+            )
+
+            val clearlyMoving =
+                gpsSpeed >= routeMovementSpeed ||
+                    prevSpeed >= routeMovementSpeed ||
+                    nextSpeed >= routeMovementSpeed
+
+            val enoughDisplacement =
+                displacementFromMovementAnchor >= minimumMovementMeters
+
+            val strongDisplacement =
+                displacementFromMovementAnchor >= strongMovementMeters
+
+            /*
+             * Require movement evidence rather than simply accepting a point
+             * because it is several metres away. This is what removes the
+             * characteristic GPS "spiderweb" around a parked vehicle.
+             */
+            val accept =
+                (clearlyMoving && enoughDisplacement) ||
+                    strongDisplacement
+
+            if (accept) {
+                result.add(point)
+                lastMovementPoint = point
+                haveConfirmedMovement = true
             }
         }
 
+        /*
+         * Handle the final point separately. The old implementation always
+         * appended it when it was within 300 m, which allowed a stationary
+         * GPS cloud at the end of a trip to become visible as scribbling.
+         */
+        val last = filtered.last()
+        val previous = filtered[filtered.lastIndex - 1]
+
+        val lastSeconds = (last.time - previous.time) / 1000.0
+        val lastDistance = if (lastSeconds > 0.0) {
+            haversine(
+                previous.latitude,
+                previous.longitude,
+                last.latitude,
+                last.longitude
+            )
+        } else 0.0
+
+        val lastImpliedSpeed = if (lastSeconds > 0.0) {
+            lastDistance / lastSeconds * 3.6
+        } else 0.0
+
+        val lastFromAnchor = haversine(
+            lastMovementPoint.latitude,
+            lastMovementPoint.longitude,
+            last.latitude,
+            last.longitude
+        )
+
+        val lastMoving =
+            last.speedKmh >= routeMovementSpeed ||
+                lastImpliedSpeed >= routeMovementSpeed
+
+        if (
+            lastMoving &&
+            lastFromAnchor >= minimumMovementMeters
+        ) {
+            result.add(last)
+        } else if (
+            !haveConfirmedMovement &&
+            lastDistance >= strongMovementMeters
+        ) {
+            // Very short trips that contain no separately confirmed movement.
+            result.add(last)
+        }
+
+        // Remove accidental duplicate consecutive points.
         return result
+            .distinctBy { it.id }
+    }
+
+    private fun isUsablePoint(point: TrackPoint): Boolean {
+        return point.latitude.isFinite() &&
+            point.longitude.isFinite() &&
+            point.accuracy.isFinite() &&
+            point.accuracy > 0.0 &&
+            point.accuracy <= 50.0
     }
 
     private data class MatchInput(
