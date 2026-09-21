@@ -68,10 +68,12 @@ class ExportActivity : Activity() {
 
         for (date in dates) {
             val trips = database.getTripsForDay(date)
-            val place = trips.firstOrNull()?.assignedPlace.orEmpty().replace(""", """")
+            val place = trips.firstOrNull()?.assignedPlace.orEmpty().replace("\"", "\"\"")
             val distance = database.getDayDistance(date)
             val fuel = database.getDayFuel(date)
-            csv.append(""$date","$place","${String.format(Locale.US, "%.2f", distance)}","${String.format(Locale.US, "%.2f", fuel)}"\n")
+            csv.append(
+                "\"$date\",\"$place\",\"${String.format(Locale.US, "%.2f", distance)}\",\"${String.format(Locale.US, "%.2f", fuel)}\"\n"
+            )
         }
 
         try {
