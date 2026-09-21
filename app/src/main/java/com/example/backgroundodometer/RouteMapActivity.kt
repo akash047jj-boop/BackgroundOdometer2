@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
@@ -26,8 +27,8 @@ class RouteMapActivity : AppCompatActivity() {
     private lateinit var database:
         OdometerDatabaseHelper
 
-    private var tripId:
-        Long = -1L
+    private var tripId =
+        -1L
 
     private lateinit var statusText:
         TextView
@@ -73,9 +74,7 @@ class RouteMapActivity : AppCompatActivity() {
                 -1L
             )
 
-        if (
-            tripId <= 0L
-        ) {
+        if (tripId <= 0L) {
 
             Toast.makeText(
                 this,
@@ -137,7 +136,7 @@ class RouteMapActivity : AppCompatActivity() {
             TextView(this)
 
         statusText.text =
-            "LOADING..."
+            "LOADING ROUTE..."
 
         statusText.textSize =
             15f
@@ -220,6 +219,10 @@ class RouteMapActivity : AppCompatActivity() {
         map =
             MapView(this)
 
+        map.setBackgroundColor(
+            Color.DKGRAY
+        )
+
         map.setTileSource(
             TileSourceFactory.MAPNIK
         )
@@ -229,6 +232,10 @@ class RouteMapActivity : AppCompatActivity() {
         )
 
         map.setBuiltInZoomControls(
+            true
+        )
+
+        map.setUseDataConnection(
             true
         )
 
@@ -259,9 +266,7 @@ class RouteMapActivity : AppCompatActivity() {
             )
         )
 
-        setContentView(
-            root
-        )
+        setContentView(root)
     }
 
     private fun loadRoute() {
@@ -276,24 +281,22 @@ class RouteMapActivity : AppCompatActivity() {
                 tripId
             )
 
-        if (
-            trip != null
-        ) {
+        if (trip != null) {
+
+            val displayedDistance =
+                if (
+                    trip.roadDistanceKm > 0.0
+                ) {
+                    trip.roadDistanceKm
+                } else {
+                    trip.distanceKm
+                }
 
             distanceText.text =
                 String.format(
                     Locale.US,
                     "ROAD DISTANCE: %.2f km",
-                    if (
-                        trip.roadDistanceKm > 0.0
-                    ) {
-
-                        trip.roadDistanceKm
-
-                    } else {
-
-                        trip.distanceKm
-                    }
+                    displayedDistance
                 )
 
             gpsDistanceText.text =
@@ -303,12 +306,12 @@ class RouteMapActivity : AppCompatActivity() {
                     trip.gpsDistanceKm
                 )
 
-            if (
-                trip.distanceSource ==
-                "ROAD"
-            ) {
+            statusText.text =
+                if (
+                    trip.distanceSource ==
+                    "ROAD"
+                ) {
 
-                statusText.text =
                     String.format(
                         Locale.US,
                         "ROAD MATCHED • %.0f%% CONFIDENCE",
@@ -316,11 +319,10 @@ class RouteMapActivity : AppCompatActivity() {
                             100.0
                     )
 
-            } else {
+                } else {
 
-                statusText.text =
                     "GPS DISTANCE USED"
-            }
+                }
         }
 
         val rawPoints =
@@ -328,9 +330,7 @@ class RouteMapActivity : AppCompatActivity() {
                 tripId
             )
 
-        if (
-            rawPoints.isEmpty()
-        ) {
+        if (rawPoints.isEmpty()) {
 
             statusText.text =
                 "NO GPS ROUTE RECORDED"
@@ -339,33 +339,30 @@ class RouteMapActivity : AppCompatActivity() {
         }
 
         val rawGeoPoints =
-            ArrayList<GeoPoint>()
+            rawPoints.map {
 
-        for (
-            point in rawPoints
-        ) {
-
-            rawGeoPoints.add(
                 GeoPoint(
-                    point.latitude,
-                    point.longitude
+                    it.latitude,
+                    it.longitude
                 )
-            )
-        }
-
-        if (
-            rawGeoPoints.size < 2
-        ) {
-
-            drawRoute(
-                rawGeoPoints
-            )
-
-            return
-        }
+            }
 
         /*
-         * First use the cached V7 matched route.
+         * IMPORTANT:
+         *
+         * Draw the raw GPS route FIRST.
+         *
+         * This means route display does not depend
+         * on OSRM or internet access.
+         */
+        drawRoute(
+            rawGeoPoints,
+            "GPS ROUTE"
+        )
+
+        /*
+         * Use an already cached matched route
+         * if one exists.
          */
         val cached =
             MapMatchingHelper
@@ -374,36 +371,28 @@ class RouteMapActivity : AppCompatActivity() {
                     tripId
                 )
 
-        if (
-            cached != null
-        ) {
+        if (cached != null) {
 
             drawRoute(
-                cached.points
+                cached.points,
+                "ROAD MATCHED ROUTE"
             )
 
             return
         }
 
-        /*
-         * If there is no cached route, match
-         * the complete GPS trace for display.
-         *
-         * This does not alter the already stored
-         * authoritative trip distance.
-         */
         statusText.text =
-            "MATCHING ROUTE..."
-
-        drawRoute(
-            rawGeoPoints
-        )
+            "GPS ROUTE • MATCHING ROAD..."
 
         executor.execute {
 
+            val threshold =
+                database.getSpeedThreshold()
+
             val result =
-                MapMatchingHelper.match(
-                    rawGeoPoints
+                MapMatchingHelper.matchTrip(
+                    rawPoints,
+                    threshold
                 )
 
             mainHandler.post {
@@ -412,12 +401,12 @@ class RouteMapActivity : AppCompatActivity() {
                     isFinishing ||
                     isDestroyed
                 ) {
-
                     return@post
                 }
 
                 if (
-                    result != null
+                    result != null &&
+                    result.points.size >= 2
                 ) {
 
                     MapMatchingHelper
@@ -428,32 +417,14 @@ class RouteMapActivity : AppCompatActivity() {
                         )
 
                     drawRoute(
-                        result.points
+                        result.points,
+                        "ROAD MATCHED ROUTE"
                     )
-
-                    if (
-                        trip?.distanceSource ==
-                        "ROAD"
-                    ) {
-
-                        statusText.text =
-                            String.format(
-                                Locale.US,
-                                "ROAD MATCHED • %.0f%% CONFIDENCE",
-                                trip.matchingConfidence *
-                                    100.0
-                            )
-
-                    } else {
-
-                        statusText.text =
-                            "GPS DISTANCE USED"
-                    }
 
                 } else {
 
                     statusText.text =
-                        "GPS ROUTE SHOWN"
+                        "GPS ROUTE SHOWN • ROAD MATCH UNAVAILABLE"
                 }
             }
         }
@@ -489,13 +460,11 @@ class RouteMapActivity : AppCompatActivity() {
     }
 
     private fun drawRoute(
-        points: List<GeoPoint>
+        points: List<GeoPoint>,
+        label: String
     ) {
 
-        if (
-            points.isEmpty()
-        ) {
-
+        if (points.isEmpty()) {
             return
         }
 
@@ -508,8 +477,20 @@ class RouteMapActivity : AppCompatActivity() {
             points
         )
 
+        /*
+         * V8 FIX:
+         *
+         * Explicit bright route colour.
+         * V7 used the Polyline default, which
+         * can be difficult to see.
+         */
+        route.outlinePaint.color =
+            Color.parseColor(
+                "#00BCD4"
+            )
+
         route.outlinePaint.strokeWidth =
-            8f
+            10f
 
         route.outlinePaint.isAntiAlias =
             true
@@ -518,163 +499,67 @@ class RouteMapActivity : AppCompatActivity() {
             route
         )
 
+        statusText.text =
+            label
+
         map.invalidate()
 
-        showRouteOnScreen(
-            points
-        )
-    }
+        /*
+         * osmdroid needs the MapView to have
+         * completed layout before fitting a
+         * BoundingBox.
+         */
+        map.post {
 
-    private fun showRouteOnScreen(
-        points: List<GeoPoint>
-    ) {
+            try {
 
-        if (
-            points.isEmpty()
-        ) {
+                val array =
+                    ArrayList(points)
 
-            return
-        }
+                if (array.size == 1) {
 
-        var minLat =
-            points[0].latitude
+                    map.controller.setCenter(
+                        array[0]
+                    )
 
-        var maxLat =
-            points[0].latitude
+                    map.controller.setZoom(
+                        17.0
+                    )
 
-        var minLon =
-            points[0].longitude
+                } else {
 
-        var maxLon =
-            points[0].longitude
+                    val boundingBox =
+                        BoundingBox
+                            .fromGeoPoints(
+                                array
+                            )
 
-        for (
-            point in points
-        ) {
+                    map.zoomToBoundingBox(
+                        boundingBox,
+                        false,
+                        80
+                    )
+                }
 
-            if (
-                point.latitude < minLat
-            ) {
+                map.invalidate()
 
-                minLat =
-                    point.latitude
-            }
-
-            if (
-                point.latitude > maxLat
-            ) {
-
-                maxLat =
-                    point.latitude
-            }
-
-            if (
-                point.longitude < minLon
-            ) {
-
-                minLon =
-                    point.longitude
-            }
-
-            if (
-                point.longitude > maxLon
-            ) {
-
-                maxLon =
-                    point.longitude
+            } catch (_: Exception) {
             }
         }
-
-        val centerLat =
-            (
-                minLat +
-                    maxLat
-                ) / 2.0
-
-        val centerLon =
-            (
-                minLon +
-                    maxLon
-                ) / 2.0
-
-        map.controller.setCenter(
-            GeoPoint(
-                centerLat,
-                centerLon
-            )
-        )
-
-        val latSpan =
-            maxLat -
-                minLat
-
-        val lonSpan =
-            maxLon -
-                minLon
-
-        val largestSpan =
-            maxOf(
-                latSpan,
-                lonSpan
-            )
-
-        val zoom =
-            when {
-
-                largestSpan > 1.0 ->
-                    8.0
-
-                largestSpan > 0.5 ->
-                    9.0
-
-                largestSpan > 0.2 ->
-                    10.0
-
-                largestSpan > 0.1 ->
-                    11.0
-
-                largestSpan > 0.05 ->
-                    12.0
-
-                largestSpan > 0.02 ->
-                    13.0
-
-                largestSpan > 0.01 ->
-                    14.0
-
-                largestSpan > 0.005 ->
-                    15.0
-
-                largestSpan > 0.002 ->
-                    16.0
-
-                else ->
-                    17.0
-            }
-
-        map.controller.setZoom(
-            zoom
-        )
     }
 
     override fun onResume() {
 
         super.onResume()
 
-        if (
-            ::map.isInitialized
-        ) {
-
+        if (::map.isInitialized) {
             map.onResume()
         }
     }
 
     override fun onPause() {
 
-        if (
-            ::map.isInitialized
-        ) {
-
+        if (::map.isInitialized) {
             map.onPause()
         }
 
@@ -685,11 +570,12 @@ class RouteMapActivity : AppCompatActivity() {
 
         executor.shutdownNow()
 
-        if (
-            ::map.isInitialized
-        ) {
-
+        if (::map.isInitialized) {
             map.onDetach()
+        }
+
+        if (::database.isInitialized) {
+            database.close()
         }
 
         super.onDestroy()
