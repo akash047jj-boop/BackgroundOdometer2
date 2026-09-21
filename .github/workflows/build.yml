@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > background-odometer-release.jks
 
-      - name: Build V22 release APK
+      - name: Build V23 release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -50,11 +50,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Upload V22 APK
+      - name: Upload V23 APK
         uses: actions/upload-artifact@v4
 
         with:
-          name: background-odometer-v22
+          name: background-odometer-v23
 
           path:
             app/build/outputs/apk/release/app-release.apk
