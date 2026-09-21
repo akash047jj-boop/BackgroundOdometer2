@@ -652,7 +652,7 @@ class MainActivity : Activity() {
             textSize = 30f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            background = buttonBackground()
+            background = buttonBackground(false)
         }
     }
 
