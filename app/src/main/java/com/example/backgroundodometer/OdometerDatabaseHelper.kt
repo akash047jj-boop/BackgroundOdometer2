@@ -45,7 +45,8 @@ data class FuelRecord(
     val litresAdded: Double,
     val fuelAfterLitres: Double,
     val note: String,
-    val reserveCrossed: Boolean
+    val reserveCrossed: Boolean,
+    val fuelStatus: String = "FUEL"
 )
 
 class OdometerDatabaseHelper(
@@ -54,7 +55,7 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    6
+    7
 ) {
 
     companion object {
@@ -126,7 +127,8 @@ class OdometerDatabaseHelper(
                 litres_added REAL DEFAULT 0,
                 fuel_after_litres REAL DEFAULT 0,
                 note TEXT DEFAULT '',
-                reserve_crossed INTEGER DEFAULT 0
+                reserve_crossed INTEGER DEFAULT 0,
+                fuel_status TEXT DEFAULT 'FUEL'
             )
             """.trimIndent()
         )
@@ -229,7 +231,8 @@ class OdometerDatabaseHelper(
                 litres_added REAL DEFAULT 0,
                 fuel_after_litres REAL DEFAULT 0,
                 note TEXT DEFAULT '',
-                reserve_crossed INTEGER DEFAULT 0
+                reserve_crossed INTEGER DEFAULT 0,
+                fuel_status TEXT DEFAULT 'FUEL'
             )
             """.trimIndent()
         )
@@ -247,6 +250,15 @@ class OdometerDatabaseHelper(
                 ALTER TABLE fuel_records
                 ADD COLUMN reserve_crossed INTEGER DEFAULT 0
                 """.trimIndent()
+            )
+        }
+
+        if (!columnExists(db, TABLE_FUEL, "fuel_status")) {
+            db.execSQL(
+                "ALTER TABLE fuel_records ADD COLUMN fuel_status TEXT DEFAULT 'FUEL'"
+            )
+            db.execSQL(
+                "UPDATE fuel_records SET fuel_status = 'FUEL'"
             )
         }
 
@@ -1315,6 +1327,14 @@ class OdometerDatabaseHelper(
             if (crossed) 1 else 0
         )
 
+        // A normal refuelling event is never a below-reserve marker.
+        // Below-reserve points are created only by markCurrentFuelBelowReserve()
+        // when the rider confirms the moment the fuel actually reaches reserve.
+        values.put(
+            "fuel_status",
+            "FUEL"
+        )
+
         writableDatabase.insert(
             TABLE_FUEL,
             null,
@@ -1341,7 +1361,8 @@ class OdometerDatabaseHelper(
                     litres_added,
                     fuel_after_litres,
                     note,
-                    reserve_crossed
+                    reserve_crossed,
+                    fuel_status
                 FROM fuel_records
                 ORDER BY time DESC
                 """,
@@ -1360,7 +1381,8 @@ class OdometerDatabaseHelper(
                         it.getDouble(3),
                         it.getDouble(4),
                         it.getString(5) ?: "",
-                        it.getInt(6) != 0
+                        it.getInt(6) != 0,
+                        it.getString(7)?.uppercase(Locale.getDefault()) ?: "ABOVE"
                     )
                 )
             }
@@ -1379,9 +1401,23 @@ class OdometerDatabaseHelper(
             return false
         }
 
+        val markerCursor = readableDatabase.rawQuery(
+            "SELECT litres_added, fuel_status FROM fuel_records WHERE id = ?",
+            arrayOf(id.toString())
+        )
+        var isMarker = false
+        markerCursor.use {
+            if (it.moveToFirst()) {
+                isMarker = it.getDouble(0) <= 0.0 &&
+                    (it.getString(1) ?: "").equals("BELOW", true)
+            }
+        }
+        if (isMarker) return false
+
         val values = ContentValues()
         values.put("litres_added", litres)
         values.put("note", note)
+        values.put("fuel_status", "FUEL")
 
         val changed = writableDatabase.update(
             TABLE_FUEL,
@@ -1602,54 +1638,41 @@ class OdometerDatabaseHelper(
             )
     }
 
+    /**
+     * Mileage is calculated from completed below-reserve cycles.
+     * A cycle starts at a BELOW RESERVE marker and ends at the next marker.
+     * Fuel added between those markers is treated as the fuel consumed for
+     * that distance, so the reserve itself is not counted as usable fuel.
+     */
     fun getAverageMileage(): Double {
+        val records = getFuelRecords().sortedBy { it.time }
+        val markers = records.filter { it.fuelStatus.equals("BELOW", true) }
 
-        val records =
-            getFuelRecords()
-                .sortedBy { it.time }
+        if (markers.size < 2) return 0.0
 
-        if (records.size < 2) {
-            return 0.0
-        }
+        var totalDistance = 0.0
+        var totalFuel = 0.0
 
-        var totalDistance =
-            0.0
+        for (i in 1 until markers.size) {
+            val previous = markers[i - 1]
+            val current = markers[i]
+            val distance = current.odometerKm - previous.odometerKm
+            if (distance <= 0.0) continue
 
-        var totalFuel =
-            0.0
+            var fuelAdded = 0.0
+            for (record in records) {
+                if (record.time >= previous.time && record.time <= current.time && record.litresAdded > 0.0) {
+                    fuelAdded += record.litresAdded
+                }
+            }
 
-        for (i in 1 until records.size) {
-
-            val previous =
-                records[i - 1]
-
-            val current =
-                records[i]
-
-            val distance =
-                current.odometerKm -
-                    previous.odometerKm
-
-            if (
-                distance > 0.0 &&
-                current.litresAdded > 0.0
-            ) {
-
-                totalDistance +=
-                    distance
-
-                totalFuel +=
-                    current.litresAdded
+            if (fuelAdded > 0.0) {
+                totalDistance += distance
+                totalFuel += fuelAdded
             }
         }
 
-        return if (
-            totalFuel > 0.0
-        ) {
-            totalDistance / totalFuel
-        } else {
-            0.0
-        }
+        return if (totalFuel > 0.0) totalDistance / totalFuel else 0.0
     }
 
     fun getOverallRange(): Double {
@@ -1681,6 +1704,29 @@ class OdometerDatabaseHelper(
         } else {
             0.0
         }
+    }
+
+    fun hasCurrentBelowReserveMarker(): Boolean {
+        val latest = getFuelRecords().firstOrNull() ?: return false
+        return latest.litresAdded <= 0.0 &&
+            latest.fuelStatus.equals("BELOW", true)
+    }
+
+    fun markCurrentFuelBelowReserve(): Boolean {
+        if (!isReserveReached()) return false
+        if (hasCurrentBelowReserveMarker()) return false
+
+        val now = System.currentTimeMillis()
+        val currentFuel = getCurrentFuel()
+        val values = ContentValues()
+        values.put("time", now)
+        values.put("odometer_km", getTotalOdometer())
+        values.put("litres_added", 0.0)
+        values.put("fuel_after_litres", currentFuel)
+        values.put("note", "Below-reserve mileage marker")
+        values.put("reserve_crossed", 0)
+        values.put("fuel_status", "BELOW")
+        return writableDatabase.insert(TABLE_FUEL, null, values) != -1L
     }
 
     fun isReserveReached(): Boolean {
@@ -1832,20 +1878,43 @@ class OdometerDatabaseHelper(
 
     private fun rebuildFuelHistory() {
         val db = writableDatabase
-        val records = mutableListOf<Pair<Long, Double>>()
+        val records = mutableListOf<Array<Any>>()
         val cursor = db.rawQuery(
-            "SELECT id, litres_added FROM fuel_records ORDER BY time ASC, id ASC",
+            "SELECT id, litres_added, fuel_after_litres, fuel_status FROM fuel_records ORDER BY time ASC, id ASC",
             null
         )
         cursor.use {
-            while (it.moveToNext()) records.add(it.getLong(0) to it.getDouble(1))
+            while (it.moveToNext()) {
+                records.add(
+                    arrayOf(
+                        it.getLong(0),
+                        it.getDouble(1),
+                        it.getDouble(2),
+                        it.getString(3) ?: "FUEL"
+                    )
+                )
+            }
         }
+
         var fuel = 0.0
         val capacity = getTankCapacity()
         db.beginTransaction()
         try {
-            for ((id, litres) in records) {
-                fuel = (fuel + litres).coerceIn(0.0, capacity)
+            for (record in records) {
+                val id = record[0] as Long
+                val litres = record[1] as Double
+                val storedAfter = record[2] as Double
+                val status = record[3] as String
+                val isMarker = litres <= 0.0 && status.equals("BELOW", true)
+
+                if (isMarker) {
+                    // A marker represents the rider's actual reserve point.
+                    // Preserve its measured fuel level instead of treating it as a refill.
+                    fuel = storedAfter.coerceIn(0.0, capacity)
+                } else {
+                    fuel = (fuel + litres).coerceIn(0.0, capacity)
+                }
+
                 val values = ContentValues()
                 values.put("fuel_after_litres", fuel)
                 db.update(TABLE_FUEL, values, "id = ?", arrayOf(id.toString()))
