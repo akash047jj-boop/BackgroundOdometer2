@@ -26,7 +26,7 @@ class TripsActivity : Activity() {
     private lateinit var database: OdometerDatabaseHelper
     private lateinit var list: LinearLayout
     private val selectedIds=mutableSetOf<Long>()
-    private val checkboxes=mutableMapOf<Long,CheckBox>()
+    private val checkboxes=mutableMapOf<Long,TextView>()
     companion object { private const val TIFFANY="#00BCD4"; private const val CARD="#151515" }
 
     override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);database=OdometerDatabaseHelper(this);buildInterface();loadTrips()}
@@ -59,9 +59,28 @@ class TripsActivity : Activity() {
     private fun addTrip(trip:TripSummary){
         val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(14,14,14,14);background=GradientDrawable().apply{cornerRadius=18f;setColor(Color.parseColor(CARD));setStroke(1,Color.DKGRAY)}}
         if(trip.distanceSource!="MANUAL"){
-            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-            val cb=CheckBox(this).apply{buttonTintList=android.content.res.ColorStateList.valueOf(Color.parseColor(TIFFANY));setOnCheckedChangeListener{_,checked->if(checked)selectedIds.add(trip.id)else selectedIds.remove(trip.id)}}
-            checkboxes[trip.id]=cb;row.addView(cb,LinearLayout.LayoutParams(55,55));row.addView(info("SELECT THIS TRIP"),wrapParams());card.addView(row,wrapParams())
+            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(0,0,0,8)}
+            val selector=TextView(this).apply{
+                text="□"
+                textSize=38f
+                setTextColor(Color.parseColor(TIFFANY))
+                typeface=Typeface.DEFAULT_BOLD
+                gravity=Gravity.CENTER
+                minWidth=dp(68)
+                minHeight=dp(68)
+                setPadding(4,0,4,4)
+                background=selectionBackground(false)
+                contentDescription="Select trip"
+                setOnClickListener{
+                    val selected=if(selectedIds.contains(trip.id)){selectedIds.remove(trip.id);false}else{selectedIds.add(trip.id);true}
+                    updateSelectionVisual(this,selected)
+                }
+            }
+            checkboxes[trip.id]=selector
+            row.addView(selector,LinearLayout.LayoutParams(dp(72),dp(72)))
+            val selectLabel=info("SELECT THIS TRIP").apply{setTextSize(16f);setTypeface(Typeface.DEFAULT_BOLD);setPadding(14,0,0,0);gravity=Gravity.CENTER_VERTICAL}
+            row.addView(selectLabel,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+            card.addView(row,wrapParams())
         }
         val type=if(trip.distanceSource=="MANUAL")"MANUAL TRIP" else "GPS TRIP"
         card.addView(label(type),wrapParams())
@@ -98,6 +117,18 @@ class TripsActivity : Activity() {
         val place=EditText(this).apply{hint="Place (optional)"}
         val box=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(25,5,25,5)};box.addView(dateText,wrapParams());box.addView(place,wrapParams())
         AlertDialog.Builder(this).setTitle("ASSIGN TRIPS").setMessage("The original trip time remains unchanged. This only assigns the trip to a day/place record.").setView(box).setNegativeButton("CANCEL",null).setPositiveButton("ASSIGN"){_,_->database.assignTripsToDay(selectedIds.toList(),dateText.text.toString(),place.text.toString().trim());selectedIds.clear();loadTrips();Toast.makeText(this,"Trips assigned",Toast.LENGTH_SHORT).show()}.show()
+    }
+
+
+    private fun selectionBackground(selected:Boolean)=GradientDrawable().apply{
+        cornerRadius=12f
+        setColor(if(selected)Color.parseColor("#073C43") else Color.parseColor("#101010"))
+        setStroke(dp(2),Color.parseColor(TIFFANY))
+    }
+
+    private fun updateSelectionVisual(view:TextView,selected:Boolean){
+        view.text=if(selected)"✓" else "□"
+        view.background=selectionBackground(selected)
     }
 
     private fun title(t:String)=TextView(this).apply{this.text=t;textSize=27f;setTextColor(Color.WHITE);typeface=Typeface.DEFAULT_BOLD;gravity=Gravity.CENTER}
