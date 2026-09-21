@@ -10,7 +10,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import android.app.Activity
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
@@ -21,7 +21,7 @@ import org.osmdroid.views.overlay.Polyline
 import java.util.Locale
 import java.util.concurrent.Executors
 
-class RouteMapActivity : AppCompatActivity() {
+class RouteMapActivity : Activity() {
 
     private lateinit var map: MapView
 
