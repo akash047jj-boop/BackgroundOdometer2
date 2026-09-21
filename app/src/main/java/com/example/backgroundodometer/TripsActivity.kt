@@ -23,643 +23,95 @@ import java.util.Date
 import java.util.Locale
 
 class TripsActivity : Activity() {
+    private lateinit var database: OdometerDatabaseHelper
+    private lateinit var list: LinearLayout
+    private val selectedIds=mutableSetOf<Long>()
+    private val checkboxes=mutableMapOf<Long,CheckBox>()
+    companion object { private const val TIFFANY="#00BCD4"; private const val CARD="#151515" }
 
-    private lateinit var database:
-        OdometerDatabaseHelper
+    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);database=OdometerDatabaseHelper(this);buildInterface();loadTrips()}
 
-    private lateinit var list:
-        LinearLayout
-
-    private val selectedIds =
-        mutableSetOf<Long>()
-
-    private val checkboxes =
-        mutableMapOf<Long, CheckBox>()
-
-    companion object {
-
-        private const val TIFFANY = "#00BCD4"
-        private const val CARD = "#151515"
+    private fun buildInterface(){
+        val scroll=ScrollView(this).apply{setBackgroundColor(Color.BLACK)}
+        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,30,20,30)}
+        root.addView(title("TRIPS"),wrapParams())
+        root.addView(info("Select automatic trips to assign them to a date/place, or add a manual trip."),wrapParams())
+        space(root,16)
+        root.addView(action("ADD MANUAL TRIP"){showManualTripDialog()},buttonParams())
+        root.addView(action("ASSIGN SELECTED"){if(selectedIds.isEmpty())Toast.makeText(this,"Select at least one trip.",Toast.LENGTH_SHORT).show()else showAssignDialog()},buttonParams())
+        root.addView(action("REFRESH"){loadTrips()},buttonParams())
+        space(root,14)
+        list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        root.addView(list,wrapParams())
+        space(root,18)
+        root.addView(action("BACK"){finish()},buttonParams())
+        scroll.addView(root);setContentView(scroll)
     }
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
-        super.onCreate(savedInstanceState)
-
-        database =
-            OdometerDatabaseHelper(this)
-
-        buildInterface()
-        loadTrips()
+    private fun loadTrips(){
+        if(!::list.isInitialized)return
+        list.removeAllViews();checkboxes.clear()
+        val trips=database.getAllTrips()
+        if(trips.isEmpty()){list.addView(info("No trips yet. Add a manual trip or start GPS tracking."),wrapParams());return}
+        trips.forEach{addTrip(it)}
     }
 
-    private fun buildInterface() {
-
-        val scroll =
-            ScrollView(this)
-
-        scroll.setBackgroundColor(Color.BLACK)
-
-        val root =
-            LinearLayout(this)
-
-        root.orientation =
-            LinearLayout.VERTICAL
-
-        root.setPadding(
-            20,
-            40,
-            20,
-            35
-        )
-
-        val title =
-            TextView(this)
-
-        title.text =
-            "TRIP HISTORY"
-
-        title.textSize = 27f
-        title.setTextColor(Color.WHITE)
-        title.typeface = Typeface.DEFAULT_BOLD
-        title.gravity = Gravity.CENTER
-
-        root.addView(
-            title,
-            wrapParams()
-        )
-
-        val subtitle =
-            TextView(this)
-
-        subtitle.text =
-            "Select trips from any date and assign them to a day/place."
-
-        subtitle.textSize = 14f
-        subtitle.setTextColor(Color.GRAY)
-        subtitle.gravity = Gravity.CENTER
-
-        root.addView(
-            subtitle,
-            wrapParams()
-        )
-
-        addSpace(root, 20)
-
-        val assign =
-            createAction("ASSIGN SELECTED")
-
-        assign.setOnClickListener {
-
-            if (selectedIds.isEmpty()) {
-
-                Toast.makeText(
-                    this,
-                    "Select at least one trip.",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-            } else {
-
-                showAssignDialog()
-            }
+    private fun addTrip(trip:TripSummary){
+        val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(14,14,14,14);background=GradientDrawable().apply{cornerRadius=18f;setColor(Color.parseColor(CARD));setStroke(1,Color.DKGRAY)}}
+        if(trip.distanceSource!="MANUAL"){
+            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+            val cb=CheckBox(this).apply{buttonTintList=android.content.res.ColorStateList.valueOf(Color.parseColor(TIFFANY));setOnCheckedChangeListener{_,checked->if(checked)selectedIds.add(trip.id)else selectedIds.remove(trip.id)}}
+            checkboxes[trip.id]=cb;row.addView(cb,LinearLayout.LayoutParams(55,55));row.addView(info("SELECT THIS TRIP"),wrapParams());card.addView(row,wrapParams())
         }
-
-        root.addView(
-            assign,
-            fullParams(58)
-        )
-
-        addSpace(root, 10)
-
-        val refresh =
-            createAction("REFRESH")
-
-        refresh.setOnClickListener {
-            loadTrips()
-        }
-
-        root.addView(
-            refresh,
-            fullParams(58)
-        )
-
-        addSpace(root, 20)
-
-        list =
-            LinearLayout(this)
-
-        list.orientation =
-            LinearLayout.VERTICAL
-
-        root.addView(
-            list,
-            wrapParams()
-        )
-
-        addSpace(root, 25)
-
-        val back =
-            createAction("BACK")
-
-        back.setOnClickListener {
-            finish()
-        }
-
-        root.addView(
-            back,
-            fullParams(58)
-        )
-
-        scroll.addView(root)
-
-        setContentView(scroll)
+        val type=if(trip.distanceSource=="MANUAL")"MANUAL TRIP" else "GPS TRIP"
+        card.addView(label(type),wrapParams())
+        card.addView(big("%.2f km".format(trip.distanceKm)),wrapParams())
+        card.addView(info(if(trip.distanceSource=="MANUAL")"Manual distance" else "Average %.1f km/h • Max %.1f km/h".format(trip.averageSpeed,trip.maxSpeed)),wrapParams())
+        if(trip.distanceSource=="MANUAL") card.addView(info("Date: ${formatDate(trip.startTime)}"),wrapParams()) else card.addView(info("${formatDateTime(trip.startTime)} → ${if(trip.endTime>0)formatTime(trip.endTime)else"Active"}"),wrapParams())
+        if(trip.assignedDate.isNotBlank())card.addView(info("ASSIGNED: ${trip.assignedDate}${if(trip.assignedPlace.isNotBlank())" • ${trip.assignedPlace}" else ""}"),wrapParams())
+        card.setOnClickListener{startActivity(Intent(this,TripDetailActivity::class.java).apply{putExtra("trip_id",trip.id)})}
+        val p=wrapParams();p.bottomMargin=10;list.addView(card,p)
     }
 
-    private fun loadTrips() {
-
-        list.removeAllViews()
-        checkboxes.clear()
-
-        val trips =
-            database.getAllTrips()
-
-        if (trips.isEmpty()) {
-
-            val empty =
-                TextView(this)
-
-            empty.text =
-                "No completed trips yet."
-
-            empty.textSize = 18f
-            empty.setTextColor(Color.GRAY)
-            empty.gravity = Gravity.CENTER
-
-            list.addView(
-                empty,
-                wrapParams()
-            )
-
-            return
-        }
-
-        for (trip in trips) {
-            addTrip(trip)
-        }
+    private fun showManualTripDialog(){
+        val layout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(25,5,25,5)}
+        val date=TextView(this).apply{text=SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Date());textSize=17f;setTextColor(Color.WHITE);gravity=Gravity.CENTER;setPadding(10,16,10,16)}
+        val cal=Calendar.getInstance();date.setOnClickListener{DatePickerDialog(this,{_,y,m,d->date.text="%04d-%02d-%02d".format(y,m+1,d)},cal.get(Calendar.YEAR),cal.get(Calendar.MONTH),cal.get(Calendar.DAY_OF_MONTH)).show()}
+        val place=EditText(this).apply{hint="Place (optional)"}
+        val distance=EditText(this).apply{hint="Distance (km)";inputType=2 or 8192}
+        val start=EditText(this).apply{hint="Start time (optional, e.g. 08:30 AM)"}
+        val end=EditText(this).apply{hint="End time (optional, e.g. 09:15 AM)"}
+        layout.addView(info("DATE"),wrapParams());layout.addView(date,wrapParams());layout.addView(place,wrapParams());layout.addView(distance,wrapParams());layout.addView(start,wrapParams());layout.addView(end,wrapParams())
+        AlertDialog.Builder(this).setTitle("ADD MANUAL TRIP").setMessage("Manual trips add their distance directly to the odometer and do not require GPS route points.").setView(layout).setNegativeButton("CANCEL",null).setPositiveButton("SAVE"){_,_->
+            val km=distance.text.toString().toDoubleOrNull();if(km==null||km<0){Toast.makeText(this,"Enter a valid distance",Toast.LENGTH_SHORT).show();return@setPositiveButton}
+            val dateValue=date.text.toString();val startMs=parseOptionalTime(dateValue,start.text.toString());val endMs=parseOptionalTime(dateValue,end.text.toString());
+            database.createManualTrip(dateValue,place.text.toString().trim(),km,startMs,endMs)
+            loadTrips();Toast.makeText(this,"Manual trip added",Toast.LENGTH_SHORT).show()
+        }.show()
     }
 
-    private fun addTrip(
-        trip: TripSummary
-    ) {
+    private fun parseOptionalTime(date:String,text:String):Long{if(text.isBlank())return 0L;val formats=arrayOf("yyyy-MM-dd hh:mm a","yyyy-MM-dd HH:mm","yyyy-MM-dd h:mm a");for(f in formats){try{return SimpleDateFormat(f,Locale.US).parse(if(f.contains("hh")||f.contains("h:mm a"))"$date ${text.uppercase()}" else "$date $text")?.time?:0L}catch(_:Exception){}};return 0L}
 
-        val card =
-            LinearLayout(this)
-
-        card.orientation =
-            LinearLayout.VERTICAL
-
-        card.setPadding(
-            15,
-            15,
-            15,
-            15
-        )
-
-        card.background =
-            GradientDrawable().apply {
-
-                cornerRadius = 20f
-
-                setColor(
-                    Color.parseColor(CARD)
-                )
-
-                setStroke(
-                    1,
-                    Color.DKGRAY
-                )
-            }
-
-        val checkRow =
-            LinearLayout(this)
-
-        checkRow.orientation =
-            LinearLayout.HORIZONTAL
-
-        checkRow.gravity =
-            Gravity.CENTER_VERTICAL
-
-        val checkbox =
-            CheckBox(this)
-
-        checkbox.buttonTintList =
-            android.content.res.ColorStateList.valueOf(
-                Color.parseColor(TIFFANY)
-            )
-
-        checkbox.setOnCheckedChangeListener {
-                _, checked ->
-
-            if (checked) {
-                selectedIds.add(trip.id)
-            } else {
-                selectedIds.remove(trip.id)
-            }
-        }
-
-        checkboxes[trip.id] =
-            checkbox
-
-        checkRow.addView(
-            checkbox,
-            LinearLayout.LayoutParams(
-                55,
-                55
-            )
-        )
-
-        val selectLabel =
-            TextView(this)
-
-        selectLabel.text =
-            "SELECT THIS TRIP"
-
-        selectLabel.textSize = 14f
-        selectLabel.setTextColor(Color.LTGRAY)
-
-        checkRow.addView(
-            selectLabel,
-            wrapParams()
-        )
-
-        card.addView(
-            checkRow,
-            wrapParams()
-        )
-
-        val date =
-            TextView(this)
-
-        date.text =
-            formatDate(trip.startTime)
-
-        date.textSize = 17f
-        date.setTextColor(
-            Color.parseColor(TIFFANY)
-        )
-        date.typeface = Typeface.DEFAULT_BOLD
-
-        card.addView(
-            date,
-            wrapParams()
-        )
-
-        val distance =
-            TextView(this)
-
-        distance.text =
-            "%.2f km".format(
-                trip.distanceKm
-            )
-
-        distance.textSize = 29f
-        distance.setTextColor(Color.WHITE)
-        distance.typeface = Typeface.DEFAULT_BOLD
-
-        card.addView(
-            distance,
-            wrapParams()
-        )
-
-        val speed =
-            TextView(this)
-
-        speed.text =
-            "Average %.1f km/h • Max %.1f km/h"
-                .format(
-                    trip.averageSpeed,
-                    trip.maxSpeed
-                )
-
-        speed.textSize = 14f
-        speed.setTextColor(Color.LTGRAY)
-
-        card.addView(
-            speed,
-            wrapParams()
-        )
-
-        val time =
-            TextView(this)
-
-        time.text =
-            if (trip.endTime > 0) {
-                "${formatTime(trip.startTime)} → " +
-                    formatTime(trip.endTime)
-            } else {
-                "${formatTime(trip.startTime)} → Active"
-            }
-
-        time.textSize = 13f
-        time.setTextColor(Color.GRAY)
-
-        card.addView(
-            time,
-            wrapParams()
-        )
-
-        if (trip.assignedDate.isNotBlank()) {
-
-            val assigned =
-                TextView(this)
-
-            assigned.text =
-                "ASSIGNED: ${trip.assignedDate}" +
-                    if (
-                        trip.assignedPlace.isNotBlank()
-                    ) {
-                        " • ${trip.assignedPlace}"
-                    } else {
-                        ""
-                    }
-
-            assigned.textSize = 13f
-            assigned.setTextColor(
-                Color.parseColor(TIFFANY)
-            )
-
-            card.addView(
-                assigned,
-                wrapParams()
-            )
-        }
-
-        card.setOnClickListener {
-
-            val intent =
-                Intent(
-                    this,
-                    TripDetailActivity::class.java
-                )
-
-            intent.putExtra(
-                "trip_id",
-                trip.id
-            )
-
-            startActivity(intent)
-        }
-
-        val params =
-            wrapParams()
-
-        params.bottomMargin = 12
-
-        list.addView(
-            card,
-            params
-        )
+    private fun showAssignDialog(){
+        val cal=Calendar.getInstance();val dateText=TextView(this).apply{text=SimpleDateFormat("yyyy-MM-dd",Locale.US).format(cal.time);textSize=18f;setTextColor(Color.WHITE);gravity=Gravity.CENTER;setPadding(20,20,20,20)}
+        dateText.setOnClickListener{DatePickerDialog(this,{_,y,m,d->dateText.text="%04d-%02d-%02d".format(y,m+1,d)},cal.get(Calendar.YEAR),cal.get(Calendar.MONTH),cal.get(Calendar.DAY_OF_MONTH)).show()}
+        val place=EditText(this).apply{hint="Place (optional)"}
+        val box=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(25,5,25,5)};box.addView(dateText,wrapParams());box.addView(place,wrapParams())
+        AlertDialog.Builder(this).setTitle("ASSIGN TRIPS").setMessage("The original trip time remains unchanged. This only assigns the trip to a day/place record.").setView(box).setNegativeButton("CANCEL",null).setPositiveButton("ASSIGN"){_,_->database.assignTripsToDay(selectedIds.toList(),dateText.text.toString(),place.text.toString().trim());selectedIds.clear();loadTrips();Toast.makeText(this,"Trips assigned",Toast.LENGTH_SHORT).show()}.show()
     }
 
-    private fun showAssignDialog() {
-
-        val calendar =
-            Calendar.getInstance()
-
-        val dateText =
-            TextView(this)
-
-        dateText.text =
-            SimpleDateFormat(
-                "yyyy-MM-dd",
-                Locale.US
-            ).format(calendar.time)
-
-        dateText.textSize = 18f
-        dateText.setTextColor(Color.WHITE)
-        dateText.gravity = Gravity.CENTER
-        dateText.setPadding(20, 20, 20, 20)
-
-        dateText.setOnClickListener {
-
-            DatePickerDialog(
-                this,
-                { _, year, month, day ->
-
-                    dateText.text =
-                        "%04d-%02d-%02d".format(
-                            year,
-                            month + 1,
-                            day
-                        )
-                },
-                calendar.get(
-                    Calendar.YEAR
-                ),
-                calendar.get(
-                    Calendar.MONTH
-                ),
-                calendar.get(
-                    Calendar.DAY_OF_MONTH
-                )
-            ).show()
-        }
-
-        val place =
-            EditText(this)
-
-        place.hint =
-            "Place"
-
-        place.setTextColor(Color.WHITE)
-        place.setHintTextColor(Color.GRAY)
-
-        val layout =
-            LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        layout.setPadding(
-            30,
-            10,
-            30,
-            10
-        )
-
-        val dateLabel =
-            TextView(this)
-
-        dateLabel.text =
-            "DATE"
-
-        dateLabel.setTextColor(
-            Color.parseColor(TIFFANY)
-        )
-
-        layout.addView(
-            dateLabel,
-            wrapParams()
-        )
-
-        layout.addView(
-            dateText,
-            wrapParams()
-        )
-
-        val placeLabel =
-            TextView(this)
-
-        placeLabel.text =
-            "PLACE"
-
-        placeLabel.setTextColor(
-            Color.parseColor(TIFFANY)
-        )
-
-        layout.addView(
-            placeLabel,
-            wrapParams()
-        )
-
-        layout.addView(
-            place,
-            wrapParams()
-        )
-
-        AlertDialog.Builder(this)
-            .setTitle(
-                "ASSIGN SELECTED TRIPS"
-            )
-            .setMessage(
-                "${selectedIds.size} trip(s) selected."
-            )
-            .setView(layout)
-            .setNegativeButton(
-                "CANCEL",
-                null
-            )
-            .setPositiveButton(
-                "ASSIGN"
-            ) { _, _ ->
-
-                database.assignTripsToDay(
-                    selectedIds.toList(),
-                    dateText.text.toString(),
-                    place.text.toString().trim()
-                )
-
-                selectedIds.clear()
-
-                loadTrips()
-
-                Toast.makeText(
-                    this,
-                    "Trips assigned.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            .show()
-    }
-
-    private fun formatDate(
-        time: Long
-    ): String {
-
-        return SimpleDateFormat(
-            "dd MMM yyyy",
-            Locale.getDefault()
-        ).format(Date(time))
-    }
-
-    private fun formatTime(
-        time: Long
-    ): String {
-
-        return SimpleDateFormat(
-            "hh:mm a",
-            Locale.getDefault()
-        ).format(Date(time))
-    }
-
-    private fun createAction(
-        text: String
-    ): TextView {
-
-        return TextView(this).apply {
-
-            this.text = text
-            textSize = 16f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-
-            background =
-                GradientDrawable().apply {
-
-                    cornerRadius = 18f
-
-                    setColor(
-                        Color.parseColor(CARD)
-                    )
-
-                    setStroke(
-                        2,
-                        Color.parseColor(TIFFANY)
-                    )
-                }
-        }
-    }
-
-    private fun wrapParams():
-        LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    }
-
-    private fun fullParams(
-        height: Int
-    ): LinearLayout.LayoutParams {
-
-        return LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            height
-        )
-    }
-
-    private fun addSpace(
-        parent: LinearLayout,
-        height: Int
-    ) {
-
-        parent.addView(
-            View(this),
-            LinearLayout.LayoutParams(
-                1,
-                height
-            )
-        )
-    }
-
-    override fun onResume() {
-
-        super.onResume()
-
-        if (::database.isInitialized) {
-            loadTrips()
-        }
-    }
-
-    override fun onDestroy() {
-
-        database.close()
-
-        super.onDestroy()
-    }
+    private fun title(t:String)=TextView(this).apply{this.text=t;textSize=27f;setTextColor(Color.WHITE);typeface=Typeface.DEFAULT_BOLD;gravity=Gravity.CENTER}
+    private fun info(t:String)=TextView(this).apply{this.text=t;textSize=14f;setTextColor(Color.LTGRAY);gravity=Gravity.CENTER}
+    private fun label(t:String)=TextView(this).apply{this.text=t;textSize=13f;setTextColor(Color.parseColor(TIFFANY));gravity=Gravity.CENTER}
+    private fun big(t:String)=TextView(this).apply{this.text=t;textSize=27f;setTextColor(Color.WHITE);typeface=Typeface.DEFAULT_BOLD;gravity=Gravity.CENTER}
+    private fun action(t:String,a:()->Unit)=TextView(this).apply{this.text=t;textSize=15f;setTextColor(Color.WHITE);typeface=Typeface.DEFAULT_BOLD;gravity=Gravity.CENTER;setBackgroundColor(Color.rgb(21,21,21));setPadding(10,14,10,14);minHeight=dp(58);setOnClickListener{a()}}
+    private fun wrapParams()=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun buttonParams()=wrapParams().apply{topMargin=4;bottomMargin=4}
+    private fun space(p:LinearLayout,h:Int){p.addView(View(this),LinearLayout.LayoutParams(1,dp(h)))}
+    private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
+    private fun formatDate(t:Long)=SimpleDateFormat("dd MMM yyyy",Locale.getDefault()).format(Date(t))
+    private fun formatDateTime(t:Long)=SimpleDateFormat("dd MMM yyyy • hh:mm a",Locale.getDefault()).format(Date(t))
+    private fun formatTime(t:Long)=SimpleDateFormat("hh:mm a",Locale.getDefault()).format(Date(t))
+    override fun onResume(){super.onResume();if(::database.isInitialized)loadTrips()}
+    override fun onDestroy(){database.close();super.onDestroy()}
 }
