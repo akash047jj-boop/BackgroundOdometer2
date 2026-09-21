@@ -1,6 +1,7 @@
 package com.example.backgroundodometer
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 import java.io.File
@@ -9,6 +10,7 @@ import java.net.URL
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 data class MapMatchingResult(
     val points: List<GeoPoint>,
@@ -21,17 +23,18 @@ object MapMatchingHelper {
     private const val OSRM_URL =
         "https://router.project-osrm.org"
 
-    private const val MAX_POINTS_PER_REQUEST =
+    /*
+     * OSRM matching normally allows up to 100
+     * locations per request.
+     */
+    private const val MAX_MATCH_POINTS =
         100
 
     private const val CONNECT_TIMEOUT =
         15000
 
     private const val READ_TIMEOUT =
-        30000
-
-    private const val MAX_GAP_SECONDS =
-        20L
+        45000
 
     private const val MIN_ACCURACY =
         3.0
@@ -84,21 +87,20 @@ object MapMatchingHelper {
                     0.0
                 )
 
-            val pointsArray =
+            val array =
                 json.optJSONArray(
                     "points"
-                )
-                    ?: return null
+                ) ?: return null
 
             val points =
                 ArrayList<GeoPoint>()
 
             for (
-                i in 0 until pointsArray.length()
+                i in 0 until array.length()
             ) {
 
                 val item =
-                    pointsArray.getJSONObject(i)
+                    array.getJSONObject(i)
 
                 points.add(
                     GeoPoint(
@@ -122,9 +124,7 @@ object MapMatchingHelper {
                 confidence
             )
 
-        } catch (
-            _: Exception
-        ) {
+        } catch (_: Exception) {
 
             null
         }
@@ -151,12 +151,10 @@ object MapMatchingHelper {
                 result.confidence
             )
 
-            val pointsArray =
-                org.json.JSONArray()
+            val array =
+                JSONArray()
 
-            for (
-                point in result.points
-            ) {
+            for (point in result.points) {
 
                 val item =
                     JSONObject()
@@ -171,14 +169,12 @@ object MapMatchingHelper {
                     point.longitude
                 )
 
-                pointsArray.put(
-                    item
-                )
+                array.put(item)
             }
 
             json.put(
                 "points",
-                pointsArray
+                array
             )
 
             cacheFile(
@@ -188,18 +184,13 @@ object MapMatchingHelper {
                 json.toString()
             )
 
-        } catch (
-            _: Exception
-        ) {
-            // Cache failure must not break
-            // tracking or route display.
+        } catch (_: Exception) {
         }
     }
 
     /*
-     * V6-compatible method.
-     *
-     * Used by RouteMapActivity.
+     * Used when RouteMapActivity only has
+     * raw GeoPoints.
      */
     fun match(
         points: List<GeoPoint>
@@ -230,18 +221,16 @@ object MapMatchingHelper {
             }
 
         return matchInputs(
-            inputs
+            resample(inputs)
         )
     }
 
     /*
-     * V7 authoritative matching.
+     * Main V8 matching method.
      *
-     * Only points whose recorded speed is at or
-     * above the odometer threshold are used.
-     *
-     * This preserves the V6 rule that the odometer
-     * should not accumulate below the threshold.
+     * We use movement-related points so that
+     * long stationary periods do not dominate
+     * the road matching.
      */
     fun matchTrip(
         points: List<TrackPoint>,
@@ -252,66 +241,19 @@ object MapMatchingHelper {
             return null
         }
 
-        val segments =
-            mutableListOf<
-                MutableList<MatchInput>
-            >()
-
-        var currentSegment =
-            mutableListOf<MatchInput>()
-
-        var previousTime =
-            -1L
-
-        for (point in points) {
-
-            if (
-                point.speedKmh <
+        val selected =
+            selectMovementPoints(
+                points,
                 speedThreshold
-            ) {
+            )
 
-                if (
-                    currentSegment.size >= 2
-                ) {
+        if (selected.size < 2) {
+            return null
+        }
 
-                    segments.add(
-                        currentSegment
-                    )
-                }
+        val inputs =
+            selected.map { point ->
 
-                currentSegment =
-                    mutableListOf()
-
-                previousTime =
-                    -1L
-
-                continue
-            }
-
-            val timeSeconds =
-                point.time / 1000L
-
-            if (
-                previousTime >= 0 &&
-                timeSeconds -
-                    previousTime >
-                MAX_GAP_SECONDS
-            ) {
-
-                if (
-                    currentSegment.size >= 2
-                ) {
-
-                    segments.add(
-                        currentSegment
-                    )
-                }
-
-                currentSegment =
-                    mutableListOf()
-            }
-
-            currentSegment.add(
                 MatchInput(
                     latitude =
                         point.latitude,
@@ -320,114 +262,22 @@ object MapMatchingHelper {
                         point.longitude,
 
                     timeSeconds =
-                        timeSeconds,
+                        point.time / 1000L,
 
                     accuracy =
                         point.accuracy
                 )
-            )
-
-            previousTime =
-                timeSeconds
-        }
-
-        if (
-            currentSegment.size >= 2
-        ) {
-
-            segments.add(
-                currentSegment
-            )
-        }
-
-        if (segments.isEmpty()) {
-            return null
-        }
-
-        val allPoints =
-            ArrayList<GeoPoint>()
-
-        var totalDistance =
-            0.0
-
-        var confidenceTotal =
-            0.0
-
-        var confidenceCount =
-            0
-
-        for (
-            segment in segments
-        ) {
-
-            if (segment.size < 2) {
-                continue
             }
 
-            val result =
-                matchInputs(
-                    segment
-                )
-                    ?: continue
-
-            if (
-                allPoints.isEmpty()
-            ) {
-
-                allPoints.addAll(
-                    result.points
-                )
-
-            } else {
-
-                allPoints.addAll(
-                    result.points.drop(1)
-                )
-            }
-
-            totalDistance +=
-                result.distanceMeters
-
-            if (
-                result.confidence > 0.0
-            ) {
-
-                confidenceTotal +=
-                    result.confidence
-
-                confidenceCount++
-            }
-        }
-
-        if (
-            allPoints.size < 2
-        ) {
-
-            return null
-        }
-
-        val confidence =
-            if (
-                confidenceCount > 0
-            ) {
-
-                confidenceTotal /
-                    confidenceCount
-
-            } else {
-
-                0.0
-            }
-
-        return MapMatchingResult(
-            points =
-                allPoints,
-
-            distanceMeters =
-                totalDistance,
-
-            confidence =
-                confidence
+        /*
+         * V8 uses ONE request containing <=100
+         * carefully sampled points.
+         *
+         * This avoids the V7 problem of firing
+         * many large GET requests.
+         */
+        return matchInputs(
+            resample(inputs)
         )
     }
 
@@ -438,6 +288,148 @@ object MapMatchingHelper {
         val accuracy: Double
     )
 
+    private fun selectMovementPoints(
+        points: List<TrackPoint>,
+        threshold: Double
+    ): List<TrackPoint> {
+
+        val result =
+            ArrayList<TrackPoint>()
+
+        for (
+            i in points.indices
+        ) {
+
+            val point =
+                points[i]
+
+            if (
+                i == 0 ||
+                i == points.lastIndex
+            ) {
+
+                result.add(point)
+
+                continue
+            }
+
+            val previous =
+                points[i - 1]
+
+            val next =
+                points[i + 1]
+
+            val previousSegmentSpeed =
+                impliedSpeed(
+                    previous,
+                    point
+                )
+
+            val nextSegmentSpeed =
+                impliedSpeed(
+                    point,
+                    next
+                )
+
+            val moving =
+                point.speedKmh >= threshold ||
+                previous.speedKmh >= threshold ||
+                next.speedKmh >= threshold ||
+                previousSegmentSpeed >= threshold ||
+                nextSegmentSpeed >= threshold
+
+            if (moving) {
+                result.add(point)
+            }
+        }
+
+        return result
+    }
+
+    private fun impliedSpeed(
+        a: TrackPoint,
+        b: TrackPoint
+    ): Double {
+
+        val seconds =
+            (
+                b.time - a.time
+            ) / 1000.0
+
+        if (seconds <= 0.0) {
+            return 0.0
+        }
+
+        val distance =
+            haversine(
+                a.latitude,
+                a.longitude,
+                b.latitude,
+                b.longitude
+            )
+
+        return (
+            distance /
+                seconds
+        ) * 3.6
+    }
+
+    /*
+     * Reduce any long trip to at most 100
+     * representative points.
+     *
+     * First and last points are always retained.
+     */
+    private fun resample(
+        inputs: List<MatchInput>
+    ): List<MatchInput> {
+
+        if (
+            inputs.size <=
+            MAX_MATCH_POINTS
+        ) {
+
+            return inputs
+        }
+
+        val result =
+            ArrayList<MatchInput>()
+
+        val maxIndex =
+            inputs.lastIndex
+
+        for (
+            i in 0 until MAX_MATCH_POINTS
+        ) {
+
+            val ratio =
+                i.toDouble() /
+                    (MAX_MATCH_POINTS - 1)
+
+            val index =
+                (
+                    ratio *
+                        maxIndex
+                ).roundToInt()
+
+            val safeIndex =
+                index.coerceIn(
+                    0,
+                    maxIndex
+                )
+
+            result.add(
+                inputs[safeIndex]
+            )
+        }
+
+        return result
+    }
+
+    /*
+     * V8 uses POST instead of putting the entire
+     * trace into the URL.
+     */
     private fun matchInputs(
         inputs: List<MatchInput>
     ): MapMatchingResult? {
@@ -446,197 +438,114 @@ object MapMatchingHelper {
             return null
         }
 
-        val allPoints =
-            ArrayList<GeoPoint>()
-
-        var totalDistance =
-            0.0
-
-        var confidenceTotal =
-            0.0
-
-        var confidenceCount =
-            0
-
-        /*
-         * Overlap chunks by one point.
-         *
-         * 0..99
-         * 99..198
-         * etc.
-         *
-         * This prevents a gap between chunks.
-         */
-        var start =
-            0
-
-        while (
-            start <
-            inputs.size - 1
-        ) {
-
-            val end =
-                min(
-                    start +
-                        MAX_POINTS_PER_REQUEST,
-                    inputs.size
-                )
-
-            val chunk =
-                inputs.subList(
-                    start,
-                    end
-                )
-
-            if (
-                chunk.size >= 2
-            ) {
-
-                val result =
-                    matchChunk(
-                        chunk
-                    )
-
-                if (
-                    result != null
-                ) {
-
-                    if (
-                        allPoints.isEmpty()
-                    ) {
-
-                        allPoints.addAll(
-                            result.points
-                        )
-
-                    } else {
-
-                        allPoints.addAll(
-                            result.points.drop(1)
-                        )
-                    }
-
-                    totalDistance +=
-                        result.distanceMeters
-
-                    if (
-                        result.confidence > 0.0
-                    ) {
-
-                        confidenceTotal +=
-                            result.confidence
-
-                        confidenceCount++
-                    }
-                }
-            }
-
-            /*
-             * Overlap the next request by one
-             * input point.
-             */
-            start =
-                end - 1
-        }
-
-        if (
-            allPoints.size < 2
-        ) {
-
-            return null
-        }
-
-        val confidence =
-            if (
-                confidenceCount > 0
-            ) {
-
-                confidenceTotal /
-                    confidenceCount
-
-            } else {
-
-                0.0
-            }
-
-        return MapMatchingResult(
-            points =
-                allPoints,
-
-            distanceMeters =
-                totalDistance,
-
-            confidence =
-                confidence
-        )
-    }
-
-    private fun matchChunk(
-        inputs: List<MatchInput>
-    ): MapMatchingResult? {
-
         return try {
 
-            val coordinates =
-                inputs.joinToString(";") {
+            val body =
+                JSONObject()
 
-                    String.format(
-                        Locale.US,
-                        "%.7f,%.7f",
-                        it.longitude,
-                        it.latitude
-                    )
-                }
+            val coordinates =
+                JSONArray()
 
             val timestamps =
-                inputs.joinToString(";") {
-                    it.timeSeconds
-                        .toString()
-                }
+                JSONArray()
 
             val radiuses =
-                inputs.joinToString(";") {
+                JSONArray()
 
-                    val accuracy =
-                        if (
-                            it.accuracy > 0.0
-                        ) {
+            for (input in inputs) {
 
-                            it.accuracy
+                val coordinate =
+                    JSONArray()
 
-                        } else {
+                /*
+                 * OSRM requires longitude first.
+                 */
+                coordinate.put(
+                    input.longitude
+                )
 
-                            10.0
-                        }
+                coordinate.put(
+                    input.latitude
+                )
 
+                coordinates.put(
+                    coordinate
+                )
+
+                timestamps.put(
+                    input.timeSeconds
+                )
+
+                val radius =
                     max(
                         MIN_ACCURACY,
                         min(
                             MAX_ACCURACY,
-                            accuracy
+                            if (
+                                input.accuracy > 0.0
+                            ) {
+                                input.accuracy
+                            } else {
+                                10.0
+                            }
                         )
-                    ).toString()
-                }
+                    )
 
-            val urlString =
-                "$OSRM_URL/match/v1/driving/" +
-                    coordinates +
-                    "?overview=full" +
-                    "&geometries=geojson" +
-                    "&steps=false" +
-                    "&gaps=split" +
-                    "&tidy=true" +
-                    "&timestamps=$timestamps" +
-                    "&radiuses=$radiuses"
+                radiuses.put(radius)
+            }
+
+            body.put(
+                "coordinates",
+                coordinates
+            )
+
+            body.put(
+                "timestamps",
+                timestamps
+            )
+
+            body.put(
+                "radiuses",
+                radiuses
+            )
+
+            body.put(
+                "overview",
+                "full"
+            )
+
+            body.put(
+                "geometries",
+                "geojson"
+            )
+
+            body.put(
+                "steps",
+                false
+            )
+
+            body.put(
+                "gaps",
+                "split"
+            )
+
+            body.put(
+                "tidy",
+                true
+            )
 
             val connection =
                 URL(
-                    urlString
-                ).openConnection()
+                    "$OSRM_URL/match/v1/driving"
+                )
+                    .openConnection()
                     as HttpURLConnection
 
             connection.requestMethod =
-                "GET"
+                "POST"
+
+            connection.doOutput =
+                true
 
             connection.connectTimeout =
                 CONNECT_TIMEOUT
@@ -645,14 +554,27 @@ object MapMatchingHelper {
                 READ_TIMEOUT
 
             connection.setRequestProperty(
-                "User-Agent",
-                "BackgroundOdometer/7.0"
+                "Content-Type",
+                "application/json"
             )
 
             connection.setRequestProperty(
                 "Accept",
                 "application/json"
             )
+
+            connection.setRequestProperty(
+                "User-Agent",
+                "BackgroundOdometer/8.0"
+            )
+
+            connection.outputStream
+                .bufferedWriter()
+                .use {
+                    it.write(
+                        body.toString()
+                    )
+                }
 
             val responseCode =
                 connection.responseCode
@@ -679,9 +601,7 @@ object MapMatchingHelper {
                 response
             )
 
-        } catch (
-            _: Exception
-        ) {
+        } catch (_: Exception) {
 
             null
         }
@@ -694,9 +614,7 @@ object MapMatchingHelper {
         return try {
 
             val json =
-                JSONObject(
-                    response
-                )
+                JSONObject(response)
 
             if (
                 json.optString(
@@ -710,13 +628,12 @@ object MapMatchingHelper {
             val matchings =
                 json.optJSONArray(
                     "matchings"
-                )
-                    ?: return null
+                ) ?: return null
 
-            val matchedPoints =
+            val routePoints =
                 ArrayList<GeoPoint>()
 
-            var totalDistance =
+            var distance =
                 0.0
 
             var confidenceTotal =
@@ -726,16 +643,13 @@ object MapMatchingHelper {
                 0
 
             for (
-                i in 0 until
-                    matchings.length()
+                i in 0 until matchings.length()
             ) {
 
                 val matching =
-                    matchings.getJSONObject(
-                        i
-                    )
+                    matchings.getJSONObject(i)
 
-                totalDistance +=
+                distance +=
                     matching.optDouble(
                         "distance",
                         0.0
@@ -747,9 +661,7 @@ object MapMatchingHelper {
                         0.0
                     )
 
-                if (
-                    confidence > 0.0
-                ) {
+                if (confidence > 0.0) {
 
                     confidenceTotal +=
                         confidence
@@ -760,24 +672,19 @@ object MapMatchingHelper {
                 val geometry =
                     matching.optJSONObject(
                         "geometry"
-                    )
-                        ?: continue
+                    ) ?: continue
 
                 val coordinates =
                     geometry.optJSONArray(
                         "coordinates"
-                    )
-                        ?: continue
+                    ) ?: continue
 
                 for (
-                    j in 0 until
-                        coordinates.length()
+                    j in 0 until coordinates.length()
                 ) {
 
                     val coordinate =
-                        coordinates.getJSONArray(
-                            j
-                        )
+                        coordinates.getJSONArray(j)
 
                     if (
                         coordinate.length() < 2
@@ -786,16 +693,12 @@ object MapMatchingHelper {
                     }
 
                     val longitude =
-                        coordinate.getDouble(
-                            0
-                        )
+                        coordinate.getDouble(0)
 
                     val latitude =
-                        coordinate.getDouble(
-                            1
-                        )
+                        coordinate.getDouble(1)
 
-                    matchedPoints.add(
+                    routePoints.add(
                         GeoPoint(
                             latitude,
                             longitude
@@ -805,7 +708,8 @@ object MapMatchingHelper {
             }
 
             if (
-                matchedPoints.size < 2
+                routePoints.size < 2 ||
+                distance <= 0.0
             ) {
 
                 return null
@@ -826,20 +730,89 @@ object MapMatchingHelper {
 
             MapMatchingResult(
                 points =
-                    matchedPoints,
+                    routePoints,
 
                 distanceMeters =
-                    totalDistance,
+                    distance,
 
                 confidence =
                     confidence
             )
 
-        } catch (
-            _: Exception
-        ) {
+        } catch (_: Exception) {
 
             null
         }
     }
+
+    private fun haversine(
+        lat1Value: Double,
+        lon1Value: Double,
+        lat2Value: Double,
+        lon2Value: Double
+    ): Double {
+
+        val earth =
+            6_371_000.0
+
+        val lat1 =
+            Math.toRadians(
+                lat1Value
+            )
+
+        val lat2 =
+            Math.toRadians(
+                lat2Value
+            )
+
+        val dLat =
+            Math.toRadians(
+                lat2Value -
+                    lat1Value
+            )
+
+        val dLon =
+            Math.toRadians(
+                lon2Value -
+                    lon1Value
+            )
+
+        val a =
+            sin(
+                dLat / 2
+            ) * sin(
+                dLat / 2
+            ) +
+            cos(lat1) *
+            cos(lat2) *
+            sin(
+                dLon / 2
+            ) * sin(
+                dLon / 2
+            )
+
+        val c =
+            2 *
+                atan2(
+                    sqrt(a),
+                    sqrt(1 - a)
+                )
+
+        return earth * c
+    }
+
+    private fun sin(value: Double) =
+        kotlin.math.sin(value)
+
+    private fun cos(value: Double) =
+        kotlin.math.cos(value)
+
+    private fun sqrt(value: Double) =
+        kotlin.math.sqrt(value)
+
+    private fun atan2(
+        y: Double,
+        x: Double
+    ) =
+        kotlin.math.atan2(y, x)
 }
