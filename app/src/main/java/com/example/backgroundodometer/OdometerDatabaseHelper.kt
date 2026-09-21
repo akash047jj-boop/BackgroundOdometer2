@@ -46,7 +46,8 @@ data class FuelRecord(
     val fuelAfterLitres: Double,
     val note: String,
     val reserveCrossed: Boolean,
-    val fuelStatus: String = "FUEL"
+    val fuelStatus: String = "FUEL",
+    val tankLevel: String = "PARTIAL"
 )
 
 class OdometerDatabaseHelper(
@@ -55,7 +56,7 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    7
+    8
 ) {
 
     companion object {
@@ -128,7 +129,8 @@ class OdometerDatabaseHelper(
                 fuel_after_litres REAL DEFAULT 0,
                 note TEXT DEFAULT '',
                 reserve_crossed INTEGER DEFAULT 0,
-                fuel_status TEXT DEFAULT 'FUEL'
+                fuel_status TEXT DEFAULT 'FUEL',
+                tank_level TEXT DEFAULT 'PARTIAL'
             )
             """.trimIndent()
         )
@@ -266,6 +268,16 @@ class OdometerDatabaseHelper(
         // as ABOVE RESERVE unless they were already explicitly marked BELOW.
         db.execSQL(
             "UPDATE fuel_records SET fuel_status = 'ABOVE' WHERE fuel_status IS NULL OR fuel_status = '' OR fuel_status = 'FUEL'"
+        )
+
+        // V18: record whether a refuelling event brought the tank to FULL.
+        if (!columnExists(db, TABLE_FUEL, "tank_level")) {
+            db.execSQL(
+                "ALTER TABLE fuel_records ADD COLUMN tank_level TEXT DEFAULT 'PARTIAL'"
+            )
+        }
+        db.execSQL(
+            "UPDATE fuel_records SET tank_level = 'PARTIAL' WHERE tank_level IS NULL OR tank_level = ''"
         )
 
         setSettingIfMissing(
@@ -1275,73 +1287,47 @@ class OdometerDatabaseHelper(
     fun addFuel(
         litres: Double,
         note: String,
-        fuelStatus: String = "ABOVE"
+        fuelStatus: String = "ABOVE",
+        tankLevel: String = "PARTIAL"
     ): Boolean {
 
         if (litres <= 0.0) {
             return false
         }
 
-        val before =
-            getCurrentFuel()
-
-        val capacity =
-            getTankCapacity()
-
-        val after =
-            minOf(
-                capacity,
-                before + litres
-            )
-
-        val reserve =
-            getReserveFuel()
+        val before = getCurrentFuel()
+        val capacity = getTankCapacity()
+        val reserve = getReserveFuel()
 
         val normalizedStatus =
             if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE"
 
+        val normalizedTank =
+            if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
+
+        val calculatedAfter =
+            minOf(capacity, before + litres)
+
+        // The rider's selected tank level/status is authoritative.
+        val after =
+            when {
+                normalizedTank == "FULL" -> capacity
+                normalizedStatus == "BELOW" -> minOf(calculatedAfter, reserve)
+                else -> calculatedAfter
+            }
+
         val crossed =
-            before <= reserve &&
-                after > reserve
+            before <= reserve && after > reserve
 
-        val values =
-            ContentValues()
-
-        values.put(
-            "time",
-            System.currentTimeMillis()
-        )
-
-        values.put(
-            "odometer_km",
-            getTotalOdometer()
-        )
-
-        values.put(
-            "litres_added",
-            litres
-        )
-
-        values.put(
-            "fuel_after_litres",
-            after
-        )
-
-        values.put(
-            "note",
-            note
-        )
-
-        values.put(
-            "reserve_crossed",
-            if (crossed) 1 else 0
-        )
-
-        // The rider explicitly chooses the fuel status after refuelling.
-        values.put(
-            "fuel_status",
-            normalizedStatus
-        )
+        val values = ContentValues()
+        values.put("time", System.currentTimeMillis())
+        values.put("odometer_km", getTotalOdometer())
+        values.put("litres_added", litres)
+        values.put("fuel_after_litres", after)
+        values.put("note", note)
+        values.put("reserve_crossed", if (crossed) 1 else 0)
+        values.put("fuel_status", normalizedStatus)
+        values.put("tank_level", normalizedTank)
 
         writableDatabase.insert(
             TABLE_FUEL,
@@ -1350,7 +1336,6 @@ class OdometerDatabaseHelper(
         )
 
         clearOlderReserveCrossed()
-
         return true
     }
 
@@ -1370,7 +1355,8 @@ class OdometerDatabaseHelper(
                     fuel_after_litres,
                     note,
                     reserve_crossed,
-                    fuel_status
+                    fuel_status,
+                    tank_level
                 FROM fuel_records
                 ORDER BY time DESC
                 """,
@@ -1393,6 +1379,10 @@ class OdometerDatabaseHelper(
                         when (it.getString(7)?.uppercase(Locale.getDefault())) {
                             "BELOW" -> "BELOW"
                             else -> "ABOVE"
+                        },
+                        when (it.getString(8)?.uppercase(Locale.getDefault())) {
+                            "FULL" -> "FULL"
+                            else -> "PARTIAL"
                         }
                     )
                 )
@@ -1406,7 +1396,8 @@ class OdometerDatabaseHelper(
         id: Long,
         litres: Double,
         note: String,
-        fuelStatus: String = "ABOVE"
+        fuelStatus: String = "ABOVE",
+        tankLevel: String = "PARTIAL"
     ): Boolean {
 
         if (litres <= 0.0) {
@@ -1429,7 +1420,14 @@ class OdometerDatabaseHelper(
         val values = ContentValues()
         values.put("litres_added", litres)
         values.put("note", note)
-        values.put("fuel_status", if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE")
+        values.put(
+            "fuel_status",
+            if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE"
+        )
+        values.put(
+            "tank_level",
+            if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
+        )
 
         val changed = writableDatabase.update(
             TABLE_FUEL,
@@ -1620,7 +1618,7 @@ class OdometerDatabaseHelper(
             records.first()
 
         val mileage =
-            getAverageMileage()
+            getBestMileage()
 
         if (mileage <= 0.0) {
 
@@ -1651,40 +1649,38 @@ class OdometerDatabaseHelper(
     }
 
     /**
-     * Mileage is calculated from completed below-reserve cycles.
-     * A cycle starts at a BELOW RESERVE marker and ends at the next marker.
-     * Fuel added between those markers is treated as the fuel consumed for
-     * that distance, so the reserve itself is not counted as usable fuel.
+     * Confirmed mileage uses two reliable reference methods:
+     * 1) FULL-TANK -> FULL-TANK cycles.
+     * 2) Rider-confirmed BELOW-RESERVE -> BELOW-RESERVE cycles.
+     *
+     * The two methods are combined using total distance / total fuel.
      */
-    fun getAverageMileage(): Double {
+    fun getConfirmedMileage(): Double {
         val records = getFuelRecords().sortedBy { it.time }
-        val markers = records.filter { it.fuelStatus.equals("BELOW", true) }
-
-        if (markers.size < 2) return 0.0
 
         var totalDistance = 0.0
         var totalFuel = 0.0
 
-        for (i in 1 until markers.size) {
-            val previous = markers[i - 1]
-            val current = markers[i]
+        val fullRecords =
+            records.filter {
+                it.litresAdded > 0.0 &&
+                    it.tankLevel.equals("FULL", true)
+            }
+
+        for (i in 1 until fullRecords.size) {
+            val previous = fullRecords[i - 1]
+            val current = fullRecords[i]
             val distance = current.odometerKm - previous.odometerKm
             if (distance <= 0.0) continue
 
-            var fuelAdded = 0.0
-            for (record in records) {
-                if (record.time >= previous.time && record.time <= current.time && record.litresAdded > 0.0) {
-                    fuelAdded += record.litresAdded
-                }
-            }
-
-            // If the current BELOW point was created during refuelling, that
-            // fuel has just been added and must not be counted as fuel consumed
-            // during the cycle ending at this point. Zero-litre manual markers
-            // naturally contribute nothing here.
-            if (current.litresAdded > 0.0) {
-                fuelAdded -= current.litresAdded
-            }
+            val fuelAdded =
+                records
+                    .filter {
+                        it.time > previous.time &&
+                            it.time <= current.time &&
+                            it.litresAdded > 0.0
+                    }
+                    .sumOf { it.litresAdded }
 
             if (fuelAdded > 0.0) {
                 totalDistance += distance
@@ -1692,14 +1688,87 @@ class OdometerDatabaseHelper(
             }
         }
 
-        return if (totalFuel > 0.0) totalDistance / totalFuel else 0.0
+        val markers =
+            records.filter {
+                it.litresAdded <= 0.0 &&
+                    it.fuelStatus.equals("BELOW", true)
+            }
+
+        for (i in 1 until markers.size) {
+            val previous = markers[i - 1]
+            val current = markers[i]
+            val distance = current.odometerKm - previous.odometerKm
+            if (distance <= 0.0) continue
+
+            val fuelAdded =
+                records
+                    .filter {
+                        it.time > previous.time &&
+                            it.time <= current.time &&
+                            it.litresAdded > 0.0
+                    }
+                    .sumOf { it.litresAdded }
+
+            if (fuelAdded > 0.0) {
+                totalDistance += distance
+                totalFuel += fuelAdded
+            }
+        }
+
+        return if (totalFuel > 0.0) {
+            totalDistance / totalFuel
+        } else {
+            0.0
+        }
+    }
+
+    /**
+     * Estimated mileage is available before a confirmed cycle exists.
+     * It uses consecutive refuelling events as a running estimate:
+     * distance travelled between refuels / litres added at the later refuel.
+     * It is intentionally labelled ESTIMATED in the UI.
+     */
+    fun getEstimatedMileage(): Double {
+        val records =
+            getFuelRecords()
+                .sortedBy { it.time }
+                .filter { it.litresAdded > 0.0 }
+
+        if (records.size < 2) {
+            return 0.0
+        }
+
+        var totalDistance = 0.0
+        var totalFuel = 0.0
+
+        for (i in 1 until records.size) {
+            val previous = records[i - 1]
+            val current = records[i]
+            val distance = current.odometerKm - previous.odometerKm
+            val fuelAdded = current.litresAdded
+
+            if (distance > 0.5 && fuelAdded > 0.1) {
+                totalDistance += distance
+                totalFuel += fuelAdded
+            }
+        }
+
+        return if (totalFuel > 0.0) {
+            totalDistance / totalFuel
+        } else {
+            0.0
+        }
+    }
+
+    fun getAverageMileage(): Double = getConfirmedMileage()
+
+    fun getBestMileage(): Double {
+        val confirmed = getConfirmedMileage()
+        return if (confirmed > 0.0) confirmed else getEstimatedMileage()
     }
 
     fun getOverallRange(): Double {
-
-        val mileage =
-            getAverageMileage()
-
+        val mileage = getBestMileage()
         return if (mileage > 0.0) {
             getCurrentFuel() * mileage
         } else {
@@ -1710,7 +1779,7 @@ class OdometerDatabaseHelper(
     fun getRangeToReserve(): Double {
 
         val mileage =
-            getAverageMileage()
+            getBestMileage()
 
         val available =
             maxOf(
@@ -1915,7 +1984,7 @@ class OdometerDatabaseHelper(
         val db = writableDatabase
         val records = mutableListOf<Array<Any>>()
         val cursor = db.rawQuery(
-            "SELECT id, litres_added, fuel_after_litres, fuel_status FROM fuel_records ORDER BY time ASC, id ASC",
+            "SELECT id, litres_added, fuel_after_litres, fuel_status, tank_level FROM fuel_records ORDER BY time ASC, id ASC",
             null
         )
         cursor.use {
@@ -1925,7 +1994,8 @@ class OdometerDatabaseHelper(
                         it.getLong(0),
                         it.getDouble(1),
                         it.getDouble(2),
-                        it.getString(3) ?: "FUEL"
+                        it.getString(3) ?: "FUEL",
+                        it.getString(4) ?: "PARTIAL"
                     )
                 )
             }
@@ -1940,12 +2010,19 @@ class OdometerDatabaseHelper(
                 val litres = record[1] as Double
                 val storedAfter = record[2] as Double
                 val status = record[3] as String
+                val tankLevel = record[4] as String
                 val isMarker = litres <= 0.0 && status.equals("BELOW", true)
 
                 if (isMarker) {
                     // A marker represents the rider's actual reserve point.
-                    // Preserve its measured fuel level instead of treating it as a refill.
                     fuel = storedAfter.coerceIn(0.0, capacity)
+                } else if (tankLevel.equals("FULL", true)) {
+                    fuel = capacity
+                } else if (status.equals("BELOW", true)) {
+                    fuel = minOf(
+                        (fuel + litres).coerceIn(0.0, capacity),
+                        getReserveFuel()
+                    )
                 } else {
                     fuel = (fuel + litres).coerceIn(0.0, capacity)
                 }
