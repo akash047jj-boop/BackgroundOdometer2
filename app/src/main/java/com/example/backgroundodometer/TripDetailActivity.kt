@@ -109,25 +109,13 @@ class TripDetailActivity : Activity() {
                 )
             )
 
-            addSection(
-                root,
-                "START TIME",
-                formatDateTime(
-                    trip.startTime
-                )
-            )
-
-            addSection(
-                root,
-                "END TIME",
-                if (trip.endTime > 0) {
-                    formatDateTime(
-                        trip.endTime
-                    )
-                } else {
-                    "Active"
-                }
-            )
+            if (trip.distanceSource == "MANUAL") {
+                addSection(root, "TYPE", "MANUAL TRIP")
+                addSection(root, "PLACE", if (trip.assignedPlace.isBlank()) "Not specified" else trip.assignedPlace)
+            } else {
+                addSection(root, "START TIME", formatDateTime(trip.startTime))
+                addSection(root, "END TIME", if (trip.endTime > 0) formatDateTime(trip.endTime) else "Active")
+            }
 
             addSection(
                 root,
@@ -168,60 +156,63 @@ class TripDetailActivity : Activity() {
                 10
             )
 
-            val routeButton =
-                TextView(this)
-
-            routeButton.text =
-                "VIEW ROUTE MAP"
-
-            routeButton.textSize =
-                17f
-
-            routeButton.setTextColor(
-                Color.WHITE
-            )
-
-            routeButton.typeface =
-                Typeface.DEFAULT_BOLD
-
-            routeButton.gravity =
-                Gravity.CENTER
-
-            routeButton.setPadding(
-                10,
-                20,
-                10,
-                20
-            )
-
-            routeButton.setBackgroundColor(
-                Color.rgb(
-                    0,
-                    90,
-                    100
+            if (trip.distanceSource != "MANUAL" && points.isNotEmpty()) {
+                val routeButton =
+                    TextView(this)
+    
+                routeButton.text =
+                    "VIEW ROUTE MAP"
+    
+                routeButton.textSize =
+                    17f
+    
+                routeButton.setTextColor(
+                    Color.WHITE
                 )
-            )
-
-            routeButton.setOnClickListener {
-
-                val intent =
-                    Intent(
-                        this,
-                        RouteMapActivity::class.java
+    
+                routeButton.typeface =
+                    Typeface.DEFAULT_BOLD
+    
+                routeButton.gravity =
+                    Gravity.CENTER
+    
+                routeButton.setPadding(
+                    10,
+                    20,
+                    10,
+                    20
+                )
+    
+                routeButton.setBackgroundColor(
+                    Color.rgb(
+                        0,
+                        90,
+                        100
                     )
-
-                intent.putExtra(
-                    "trip_id",
-                    tripId
                 )
-
-                startActivity(intent)
+    
+                routeButton.setOnClickListener {
+    
+                    val intent =
+                        Intent(
+                            this,
+                            RouteMapActivity::class.java
+                        )
+    
+                    intent.putExtra(
+                        "trip_id",
+                        tripId
+                    )
+    
+                    startActivity(intent)
+                }
+    
+                root.addView(
+                    routeButton,
+                    wrapParams()
+                )
+    
             }
-
-            root.addView(
-                routeButton,
-                wrapParams()
-            )
 
             addSpace(
                 root,
