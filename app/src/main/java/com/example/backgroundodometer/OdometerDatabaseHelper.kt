@@ -564,6 +564,39 @@ class OdometerDatabaseHelper(
         )
     }
 
+    fun createManualTrip(
+        date: String,
+        place: String,
+        distanceKm: Double,
+        startTime: Long = 0L,
+        endTime: Long = 0L
+    ): Long {
+        val parsedDate = try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)?.time ?: System.currentTimeMillis()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
+        }
+
+        val effectiveStart = if (startTime > 0L) startTime else parsedDate
+        val effectiveEnd = if (endTime > 0L) endTime else 0L
+
+        val values = ContentValues()
+        values.put("start_time", effectiveStart)
+        values.put("end_time", effectiveEnd)
+        values.put("distance_km", distanceKm.coerceAtLeast(0.0))
+        values.put("average_speed", 0.0)
+        values.put("max_speed", 0.0)
+        values.put("completed", 1)
+        values.put("gps_distance_km", 0.0)
+        values.put("road_distance_km", 0.0)
+        values.put("distance_source", "MANUAL")
+        values.put("matching_confidence", 1.0)
+        values.put("assigned_date", date)
+        values.put("assigned_place", place)
+
+        return writableDatabase.insert(TABLE_TRIPS, null, values)
+    }
+
     fun getActiveTrip(): TripSummary? {
 
         val cursor =
@@ -1657,12 +1690,7 @@ class OdometerDatabaseHelper(
     }
 
     fun isReserveCrossed(): Boolean {
-
-        val records =
-            getFuelRecords()
-
-        return records.firstOrNull()
-            ?.reserveCrossed == true
+        return getCurrentFuel() <= getReserveFuel()
     }
 
     fun setSpeedThreshold(value: Double) {
