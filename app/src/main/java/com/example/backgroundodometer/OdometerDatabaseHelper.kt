@@ -2,11 +2,16 @@ package com.example.backgroundodometer
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 data class TripSummary(
     val id: Long,
@@ -37,7 +42,7 @@ class OdometerDatabaseHelper(
     context,
     "background_odometer.db",
     null,
-    2
+    3
 ) {
 
     companion object {
@@ -50,6 +55,15 @@ class OdometerDatabaseHelper(
 
         private const val TABLE_SETTINGS =
             "settings"
+
+        private const val MAX_JUMP =
+            300.0
+
+        private const val MAX_TIME_GAP =
+            30.0
+
+        private const val MAX_SPEED =
+            180.0
     }
 
     override fun onCreate(
@@ -140,10 +154,6 @@ class OdometerDatabaseHelper(
                 """.trimIndent()
             )
 
-            /*
-             * Existing V6 trips already have distance_km.
-             * Preserve that distance as the GPS distance.
-             */
             db.execSQL(
                 """
                 UPDATE trips
@@ -152,6 +162,134 @@ class OdometerDatabaseHelper(
                 """.trimIndent()
             )
         }
+
+        if (oldVersion < 3) {
+
+            repairSuspiciousTrips(db)
+        }
+    }
+
+    private fun repairSuspiciousTrips(
+        db: SQLiteDatabase
+    ) {
+
+        try {
+
+            val threshold =
+                getSpeedThresholdFromDb(db)
+
+            val cursor =
+                db.rawQuery(
+                    """
+                    SELECT
+                        id,
+                        distance_km
+                    FROM trips
+                    WHERE completed = 1
+                    """,
+                    null
+                )
+
+            cursor.use {
+
+                while (it.moveToNext()) {
+
+                    val id =
+                        it.getLong(0)
+
+                    val oldDistance =
+                        it.getDouble(1)
+
+                    val calculated =
+                        calculateGpsDistance(
+                            db,
+                            id,
+                            threshold
+                        )
+
+                    /*
+                     * Only repair clearly suspicious
+                     * old distances.
+                     */
+                    val suspicious =
+                        calculated > 0.5 &&
+                        (
+                            oldDistance <= 0.1 ||
+                            calculated >
+                                oldDistance * 1.5
+                        )
+
+                    if (suspicious) {
+
+                        val values =
+                            ContentValues()
+
+                        values.put(
+                            "distance_km",
+                            calculated
+                        )
+
+                        values.put(
+                            "gps_distance_km",
+                            calculated
+                        )
+
+                        values.put(
+                            "road_distance_km",
+                            0.0
+                        )
+
+                        values.put(
+                            "distance_source",
+                            "GPS"
+                        )
+
+                        values.put(
+                            "matching_confidence",
+                            0.0
+                        )
+
+                        db.update(
+                            TABLE_TRIPS,
+                            values,
+                            "id = ?",
+                            arrayOf(
+                                id.toString()
+                            )
+                        )
+                    }
+                }
+            }
+
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun getSpeedThresholdFromDb(
+        db: SQLiteDatabase
+    ): Double {
+
+        val cursor =
+            db.rawQuery(
+                """
+                SELECT value
+                FROM settings
+                WHERE key = ?
+                """,
+                arrayOf("speed_threshold")
+            )
+
+        cursor.use {
+
+            if (it.moveToFirst()) {
+
+                return it.getString(0)
+                    .toDoubleOrNull()
+                    ?: 6.0
+            }
+        }
+
+        return 6.0
     }
 
     private fun setSetting(
@@ -268,30 +406,19 @@ class OdometerDatabaseHelper(
 
         val cursor =
             readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance_km,
-                    average_speed,
-                    max_speed,
-                    gps_distance_km,
-                    road_distance_km,
-                    distance_source,
-                    matching_confidence
-                FROM trips
-                WHERE completed = 0
-                ORDER BY id DESC
-                LIMIT 1
-                """,
+                tripSelectSql(
+                    "completed = 0"
+                ) +
+                    """
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
                 null
             )
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -431,9 +558,6 @@ class OdometerDatabaseHelper(
         )
     }
 
-    /*
-     * Existing API preserved.
-     */
     fun completeTrip(
         tripId: Long,
         distanceKm: Double,
@@ -452,9 +576,6 @@ class OdometerDatabaseHelper(
         )
     }
 
-    /*
-     * V7 authoritative completion.
-     */
     fun completeTripWithDistances(
         tripId: Long,
         gpsDistanceKm: Double,
@@ -513,12 +634,206 @@ class OdometerDatabaseHelper(
         )
     }
 
+    fun calculateGpsDistance(
+        tripId: Long,
+        threshold: Double
+    ): Double {
+
+        return calculateGpsDistance(
+            readableDatabase,
+            tripId,
+            threshold
+        )
+    }
+
+    private fun calculateGpsDistance(
+        db: SQLiteDatabase,
+        tripId: Long,
+        threshold: Double
+    ): Double {
+
+        val points =
+            ArrayList<TrackPoint>()
+
+        val cursor =
+            db.rawQuery(
+                """
+                SELECT
+                    id,
+                    trip_id,
+                    latitude,
+                    longitude,
+                    time,
+                    speed_kmh,
+                    accuracy
+                FROM track_points
+                WHERE trip_id = ?
+                ORDER BY time ASC
+                """,
+                arrayOf(
+                    tripId.toString()
+                )
+            )
+
+        cursor.use {
+
+            while (it.moveToNext()) {
+
+                points.add(
+                    TrackPoint(
+                        id = it.getLong(0),
+                        tripId = it.getLong(1),
+                        latitude = it.getDouble(2),
+                        longitude = it.getDouble(3),
+                        time = it.getLong(4),
+                        speedKmh = it.getDouble(5),
+                        accuracy = it.getDouble(6)
+                    )
+                )
+            }
+        }
+
+        if (points.size < 2) {
+            return 0.0
+        }
+
+        var coordinateMeters =
+            0.0
+
+        var speedMeters =
+            0.0
+
+        for (
+            i in 1 until points.size
+        ) {
+
+            val previous =
+                points[i - 1]
+
+            val current =
+                points[i]
+
+            val seconds =
+                (
+                    current.time -
+                        previous.time
+                ) / 1000.0
+
+            if (
+                seconds <= 0.0 ||
+                seconds > MAX_TIME_GAP
+            ) {
+
+                continue
+            }
+
+            val coordinateDistance =
+                haversine(
+                    previous.latitude,
+                    previous.longitude,
+                    current.latitude,
+                    current.longitude
+                )
+
+            if (
+                coordinateDistance <=
+                MAX_JUMP
+            ) {
+
+                val impliedSpeed =
+                    (
+                        coordinateDistance /
+                            seconds
+                    ) * 3.6
+
+                val moving =
+                    current.speedKmh >= threshold ||
+                    previous.speedKmh >= threshold ||
+                    impliedSpeed >= threshold
+
+                if (moving) {
+
+                    /*
+                     * Avoid counting tiny GPS jitter
+                     * as actual travel.
+                     */
+                    val minimumDistance =
+                        maxOf(
+                            5.0,
+                            previous.accuracy * 1.5,
+                            current.accuracy * 1.5
+                        )
+
+                    if (
+                        coordinateDistance >=
+                        minimumDistance ||
+                        current.speedKmh >=
+                        threshold ||
+                        previous.speedKmh >=
+                        threshold
+                    ) {
+
+                        coordinateMeters +=
+                            coordinateDistance
+                    }
+                }
+            }
+
+            /*
+             * Independent speed/time estimate.
+             */
+            val averageSpeed =
+                (
+                    previous.speedKmh +
+                        current.speedKmh
+                ) / 2.0
+
+            if (
+                averageSpeed >=
+                threshold &&
+                averageSpeed <=
+                MAX_SPEED
+            ) {
+
+                speedMeters +=
+                    (
+                        averageSpeed /
+                            3.6
+                    ) * seconds
+            }
+        }
+
+        val coordinateKm =
+            coordinateMeters /
+                1000.0
+
+        val speedKm =
+            speedMeters /
+                1000.0
+
+        /*
+         * If GPS coordinates have become nearly
+         * stationary while the location provider
+         * is reporting genuine movement speed,
+         * use speed/time as the fallback.
+         */
+        return if (
+            speedKm >= 1.0 &&
+            coordinateKm <
+                speedKm * 0.25
+        ) {
+
+            speedKm
+
+        } else {
+
+            coordinateKm
+        }
+    }
+
     fun markTripProcessing(
         tripId: Long
     ) {
-        /*
-         * Reserved for future UI status.
-         */
     }
 
     fun markTripFailed(
@@ -556,22 +871,12 @@ class OdometerDatabaseHelper(
 
         val cursor =
             readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance_km,
-                    average_speed,
-                    max_speed,
-                    gps_distance_km,
-                    road_distance_km,
-                    distance_source,
-                    matching_confidence
-                FROM trips
-                WHERE completed = 1
-                ORDER BY start_time DESC
-                """,
+                tripSelectSql(
+                    "completed = 1"
+                ) +
+                    """
+                    ORDER BY start_time DESC
+                    """,
                 null
             )
 
@@ -594,21 +899,9 @@ class OdometerDatabaseHelper(
 
         val cursor =
             readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance_km,
-                    average_speed,
-                    max_speed,
-                    gps_distance_km,
-                    road_distance_km,
-                    distance_source,
-                    matching_confidence
-                FROM trips
-                WHERE id = ?
-                """,
+                tripSelectSql(
+                    "id = ?"
+                ),
                 arrayOf(
                     tripId.toString()
                 )
@@ -617,7 +910,6 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -630,30 +922,19 @@ class OdometerDatabaseHelper(
 
         val cursor =
             readableDatabase.rawQuery(
-                """
-                SELECT
-                    id,
-                    start_time,
-                    end_time,
-                    distance_km,
-                    average_speed,
-                    max_speed,
-                    gps_distance_km,
-                    road_distance_km,
-                    distance_source,
-                    matching_confidence
-                FROM trips
-                WHERE completed = 1
-                ORDER BY end_time DESC
-                LIMIT 1
-                """,
+                tripSelectSql(
+                    "completed = 1"
+                ) +
+                    """
+                    ORDER BY end_time DESC
+                    LIMIT 1
+                    """,
                 null
             )
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return cursorToTrip(it)
             }
         }
@@ -680,7 +961,6 @@ class OdometerDatabaseHelper(
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return it.getDouble(0)
             }
         }
@@ -717,15 +997,12 @@ class OdometerDatabaseHelper(
                     'localtime'
                 ) = ?
                 """,
-                arrayOf(
-                    today
-                )
+                arrayOf(today)
             )
 
         cursor.use {
 
             if (it.moveToFirst()) {
-
                 return it.getDouble(0)
             }
         }
@@ -733,8 +1010,29 @@ class OdometerDatabaseHelper(
         return 0.0
     }
 
+    private fun tripSelectSql(
+        where: String
+    ): String {
+
+        return """
+            SELECT
+                id,
+                start_time,
+                end_time,
+                distance_km,
+                average_speed,
+                max_speed,
+                gps_distance_km,
+                road_distance_km,
+                distance_source,
+                matching_confidence
+            FROM trips
+            WHERE $where
+        """.trimIndent()
+    }
+
     private fun cursorToTrip(
-        cursor: android.database.Cursor
+        cursor: Cursor
     ): TripSummary {
 
         return TripSummary(
@@ -770,5 +1068,55 @@ class OdometerDatabaseHelper(
             matchingConfidence =
                 cursor.getDouble(9)
         )
+    }
+
+    private fun haversine(
+        lat1Value: Double,
+        lon1Value: Double,
+        lat2Value: Double,
+        lon2Value: Double
+    ): Double {
+
+        val earth =
+            6_371_000.0
+
+        val lat1 =
+            Math.toRadians(
+                lat1Value
+            )
+
+        val lat2 =
+            Math.toRadians(
+                lat2Value
+            )
+
+        val dLat =
+            Math.toRadians(
+                lat2Value -
+                    lat1Value
+            )
+
+        val dLon =
+            Math.toRadians(
+                lon2Value -
+                    lon1Value
+            )
+
+        val a =
+            sin(dLat / 2) *
+                sin(dLat / 2) +
+                cos(lat1) *
+                cos(lat2) *
+                sin(dLon / 2) *
+                sin(dLon / 2)
+
+        val c =
+            2 *
+                atan2(
+                    sqrt(a),
+                    sqrt(1 - a)
+                )
+
+        return earth * c
     }
 }
