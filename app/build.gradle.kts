@@ -23,10 +23,10 @@ android {
             35
 
         versionCode =
-            8
+            9
 
         versionName =
-            "8.0"
+            "9.0"
     }
 
     compileOptions {
@@ -53,7 +53,9 @@ android {
                     "background-odometer-release.jks"
                 )
 
-            if (keystoreFile.exists()) {
+            if (
+                keystoreFile.exists()
+            ) {
 
                 storeFile =
                     keystoreFile
