@@ -28,7 +28,7 @@ object MapMatchingHelper {
      * locations per request.
      */
     private const val MAX_MATCH_POINTS =
-        100
+        60
 
     private const val CONNECT_TIMEOUT =
         15000
@@ -232,6 +232,10 @@ object MapMatchingHelper {
      * long stationary periods do not dominate
      * the road matching.
      */
+    /**
+     * Matches the cleaned route, not the odometer threshold.
+     * The speed threshold controls odometer accumulation only.
+     */
     fun matchTrip(
         points: List<TrackPoint>,
         speedThreshold: Double
@@ -241,44 +245,125 @@ object MapMatchingHelper {
             return null
         }
 
-        val selected =
-            selectMovementPoints(
-                points,
-                speedThreshold
-            )
+        val cleaned =
+            cleanRoutePoints(points)
 
-        if (selected.size < 2) {
+        if (cleaned.size < 2) {
             return null
         }
 
         val inputs =
-            selected.map { point ->
-
+            cleaned.map { point ->
                 MatchInput(
-                    latitude =
-                        point.latitude,
-
-                    longitude =
-                        point.longitude,
-
-                    timeSeconds =
-                        point.time / 1000L,
-
-                    accuracy =
-                        point.accuracy
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    timeSeconds = point.time / 1000L,
+                    accuracy = point.accuracy
                 )
             }
 
-        /*
-         * V8 uses ONE request containing <=100
-         * carefully sampled points.
-         *
-         * This avoids the V7 problem of firing
-         * many large GET requests.
-         */
         return matchInputs(
             resample(inputs)
         )
+    }
+
+    /**
+     * Removes GPS noise from the displayed/matched route while preserving
+     * genuine slow movement. It does NOT apply the odometer speed threshold.
+     */
+    fun cleanRoutePoints(
+        points: List<TrackPoint>
+    ): List<TrackPoint> {
+
+        if (points.size <= 2) {
+            return points.filter {
+                it.latitude.isFinite() &&
+                    it.longitude.isFinite() &&
+                    (it.accuracy <= 0.0 || it.accuracy <= 75.0)
+            }
+        }
+
+        val valid =
+            points.filter {
+                it.latitude.isFinite() &&
+                    it.longitude.isFinite() &&
+                    (it.accuracy <= 0.0 || it.accuracy <= 75.0)
+            }
+
+        if (valid.size < 2) {
+            return valid
+        }
+
+        val result = ArrayList<TrackPoint>()
+        result.add(valid.first())
+
+        for (i in 1 until valid.lastIndex) {
+            val point = valid[i]
+            val previous = result.last()
+
+            val seconds =
+                (point.time - previous.time) / 1000.0
+
+            if (seconds <= 0.0) {
+                continue
+            }
+
+            val distance =
+                haversine(
+                    previous.latitude,
+                    previous.longitude,
+                    point.latitude,
+                    point.longitude
+                )
+
+            val impliedSpeed =
+                distance / seconds * 3.6
+
+            // Reject impossible GPS jumps.
+            if (distance > 300.0 || impliedSpeed > 180.0) {
+                continue
+            }
+
+            val accuracy =
+                max(
+                    previous.accuracy.takeIf { it > 0.0 } ?: 10.0,
+                    point.accuracy.takeIf { it > 0.0 } ?: 10.0
+                )
+
+            val stationaryTolerance =
+                max(
+                    20.0,
+                    accuracy * 2.5
+                )
+
+            val stationaryNoise =
+                point.speedKmh < 2.0 &&
+                    previous.speedKmh < 2.0 &&
+                    distance < stationaryTolerance
+
+            if (!stationaryNoise) {
+                result.add(point)
+            }
+        }
+
+        val last = valid.last()
+        val previous = result.last()
+
+        if (last.id != previous.id) {
+            val distance =
+                haversine(
+                    previous.latitude,
+                    previous.longitude,
+                    last.latitude,
+                    last.longitude
+                )
+
+            if (distance <= 300.0) {
+                result.add(last)
+            }
+        }
+
+        return result
     }
 
     private data class MatchInput(
@@ -438,171 +523,156 @@ object MapMatchingHelper {
             return null
         }
 
-        return try {
+        if (inputs.size <= MAX_MATCH_POINTS) {
+            return matchSingleRequest(inputs)
+        }
 
-            val body =
-                JSONObject()
+        var start = 0
+        var totalDistance = 0.0
+        var confidenceTotal = 0.0
+        var confidenceCount = 0
+        val routePoints = ArrayList<GeoPoint>()
 
-            val coordinates =
-                JSONArray()
-
-            val timestamps =
-                JSONArray()
-
-            val radiuses =
-                JSONArray()
-
-            for (input in inputs) {
-
-                val coordinate =
-                    JSONArray()
-
-                /*
-                 * OSRM requires longitude first.
-                 */
-                coordinate.put(
-                    input.longitude
+        while (start < inputs.lastIndex) {
+            val end =
+                min(
+                    inputs.lastIndex,
+                    start + MAX_MATCH_POINTS - 1
                 )
 
-                coordinate.put(
-                    input.latitude
+            val chunk =
+                inputs.subList(
+                    start,
+                    end + 1
                 )
 
-                coordinates.put(
-                    coordinate
-                )
+            val result =
+                matchSingleRequest(chunk)
+                    ?: return null
 
-                timestamps.put(
-                    input.timeSeconds
-                )
+            totalDistance += result.distanceMeters
 
-                val radius =
-                    max(
-                        MIN_ACCURACY,
-                        min(
-                            MAX_ACCURACY,
-                            if (
-                                input.accuracy > 0.0
-                            ) {
-                                input.accuracy
-                            } else {
-                                10.0
-                            }
-                        )
-                    )
-
-                radiuses.put(radius)
+            if (result.confidence > 0.0) {
+                confidenceTotal += result.confidence
+                confidenceCount++
             }
 
-            body.put(
-                "coordinates",
-                coordinates
-            )
+            if (routePoints.isEmpty()) {
+                routePoints.addAll(result.points)
+            } else {
+                routePoints.addAll(result.points.drop(1))
+            }
 
-            body.put(
-                "timestamps",
-                timestamps
-            )
+            if (end == inputs.lastIndex) {
+                break
+            }
 
-            body.put(
-                "radiuses",
-                radiuses
-            )
+            // One-point overlap keeps adjacent road-matched chunks connected.
+            start = end
+        }
 
-            body.put(
-                "overview",
-                "full"
-            )
+        if (routePoints.size < 2 || totalDistance <= 0.0) {
+            return null
+        }
 
-            body.put(
-                "geometries",
-                "geojson"
-            )
+        return MapMatchingResult(
+            points = routePoints,
+            distanceMeters = totalDistance,
+            confidence =
+                if (confidenceCount > 0) {
+                    confidenceTotal / confidenceCount
+                } else {
+                    0.0
+                }
+        )
+    }
 
-            body.put(
-                "steps",
-                false
-            )
+    /**
+     * OSRM's public matching endpoint is used with GET.
+     * The previous implementation posted JSON to the endpoint, which is
+     * commonly rejected by the public OSRM server.
+     */
+    private fun matchSingleRequest(
+        inputs: List<MatchInput>
+    ): MapMatchingResult? {
 
-            body.put(
-                "gaps",
-                "split"
-            )
+        if (inputs.size < 2) {
+            return null
+        }
 
-            body.put(
-                "tidy",
-                true
-            )
+        return try {
+            val coordinates =
+                inputs.joinToString(";") {
+                    "${it.longitude},${it.latitude}"
+                }
+
+            val timestamps =
+                inputs.joinToString(";") {
+                    it.timeSeconds.toString()
+                }
+
+            val radiuses =
+                inputs.joinToString(";") {
+                    val radius =
+                        max(
+                            MIN_ACCURACY,
+                            min(
+                                MAX_ACCURACY,
+                                if (it.accuracy > 0.0) {
+                                    it.accuracy
+                                } else {
+                                    10.0
+                                }
+                            )
+                        )
+                    radius.toInt().toString()
+                }
+
+            val urlString =
+                "$OSRM_URL/match/v1/driving/" +
+                    "$coordinates" +
+                    "?overview=full" +
+                    "&geometries=geojson" +
+                    "&steps=false" +
+                    "&gaps=split" +
+                    "&tidy=true" +
+                    "&timestamps=$timestamps" +
+                    "&radiuses=$radiuses"
 
             val connection =
-                URL(
-                    "$OSRM_URL/match/v1/driving"
-                )
-                    .openConnection()
-                    as HttpURLConnection
+                URL(urlString)
+                    .openConnection() as HttpURLConnection
 
-            connection.requestMethod =
-                "POST"
-
-            connection.doOutput =
-                true
-
-            connection.connectTimeout =
-                CONNECT_TIMEOUT
-
-            connection.readTimeout =
-                READ_TIMEOUT
-
-            connection.setRequestProperty(
-                "Content-Type",
-                "application/json"
-            )
-
+            connection.requestMethod = "GET"
+            connection.connectTimeout = CONNECT_TIMEOUT
+            connection.readTimeout = READ_TIMEOUT
             connection.setRequestProperty(
                 "Accept",
                 "application/json"
             )
-
             connection.setRequestProperty(
                 "User-Agent",
-                "BackgroundOdometer/8.0"
+                "BackgroundOdometer/18.0"
             )
-
-            connection.outputStream
-                .bufferedWriter()
-                .use {
-                    it.write(
-                        body.toString()
-                    )
-                }
 
             val responseCode =
                 connection.responseCode
 
-            if (
-                responseCode != 200
-            ) {
-
+            if (responseCode != 200) {
                 connection.disconnect()
-
                 return null
             }
 
             val response =
                 connection.inputStream
                     .bufferedReader()
-                    .use {
-                        it.readText()
-                    }
+                    .use { it.readText() }
 
             connection.disconnect()
 
-            parseResponse(
-                response
-            )
+            parseResponse(response)
 
         } catch (_: Exception) {
-
             null
         }
     }
