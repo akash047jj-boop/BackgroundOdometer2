@@ -26,6 +26,7 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -167,8 +168,31 @@ class MainActivity : Activity() {
             40
         )
 
+        val topBar = LinearLayout(this)
+        topBar.orientation = LinearLayout.HORIZONTAL
+        topBar.gravity = Gravity.CENTER_VERTICAL
+
+        val menuButton = createMenuButton("☰")
+
+        topBar.addView(
+            menuButton,
+            LinearLayout.LayoutParams(58, 58)
+        )
+
+        val title = createTitle("BACKGROUND ODOMETER")
+        topBar.addView(
+            title,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+
+        val spacer = View(this)
+        topBar.addView(
+            spacer,
+            LinearLayout.LayoutParams(58, 58)
+        )
+
         root.addView(
-            createTitle("BACKGROUND ODOMETER"),
+            topBar,
             wrapParams()
         )
 
@@ -533,7 +557,103 @@ class MainActivity : Activity() {
             )
         )
 
-        setContentView(scroll)
+        val drawerLayout = DrawerLayout(this)
+        drawerLayout.setBackgroundColor(Color.BLACK)
+        drawerLayout.id = android.R.id.content
+
+        val contentParams = DrawerLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        drawerLayout.addView(scroll, contentParams)
+
+        val drawer = buildNavigationDrawer(drawerLayout)
+        val drawerParams = DrawerLayout.LayoutParams(
+            (310 * resources.displayMetrics.density).toInt(),
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        drawerParams.gravity = Gravity.START
+        drawerLayout.addView(drawer, drawerParams)
+
+        menuButton.setOnClickListener {
+            drawerLayout.openDrawer(Gravity.START)
+        }
+
+        setContentView(drawerLayout)
+    }
+
+    private fun buildNavigationDrawer(
+        drawerLayout: DrawerLayout
+    ): LinearLayout {
+
+        val drawer = LinearLayout(this)
+        drawer.orientation = LinearLayout.VERTICAL
+        drawer.setPadding(28, 55, 28, 30)
+        drawer.setBackgroundColor(Color.rgb(10, 10, 10))
+
+        val title = createTitle("MENU")
+        drawer.addView(title, wrapParams())
+        addSpace(drawer, 25)
+
+        drawer.addView(drawerItem("HOME") {
+            drawerLayout.closeDrawer(Gravity.START)
+        }, fullParams(58))
+        addSpace(drawer, 10)
+
+        drawer.addView(drawerItem("TRIPS") {
+            drawerLayout.closeDrawer(Gravity.START)
+            startActivity(Intent(this, TripsActivity::class.java))
+        }, fullParams(58))
+        addSpace(drawer, 10)
+
+        drawer.addView(drawerItem("DAYS") {
+            drawerLayout.closeDrawer(Gravity.START)
+            startActivity(Intent(this, DaysActivity::class.java))
+        }, fullParams(58))
+        addSpace(drawer, 10)
+
+        drawer.addView(drawerItem("FUEL") {
+            drawerLayout.closeDrawer(Gravity.START)
+            showFuelMenu()
+        }, fullParams(58))
+        addSpace(drawer, 10)
+
+        drawer.addView(drawerItem("SETTINGS") {
+            drawerLayout.closeDrawer(Gravity.START)
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }, fullParams(58))
+        addSpace(drawer, 10)
+
+        drawer.addView(drawerItem("EXPORT") {
+            drawerLayout.closeDrawer(Gravity.START)
+            startActivity(Intent(this, ExportActivity::class.java))
+        }, fullParams(58))
+
+        addSpace(drawer, 30)
+        drawer.addView(createLabel("Background Odometer V14", "#777777"), wrapParams())
+
+        return drawer
+    }
+
+    private fun drawerItem(
+        text: String,
+        action: () -> Unit
+    ): TextView {
+        return createAction(text).apply {
+            setOnClickListener { action() }
+        }
+    }
+
+    private fun createMenuButton(
+        text: String
+    ): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 30f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = buttonBackground()
+        }
     }
 
     private fun showFuelMenu() {
@@ -1757,6 +1877,16 @@ class MainActivity : Activity() {
         }
 
         super.onPause()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        val drawerLayout = findViewById<DrawerLayout>(android.R.id.content)
+        if (drawerLayout != null && drawerLayout.isDrawerOpen(Gravity.START)) {
+            drawerLayout.closeDrawer(Gravity.START)
+            return
+        }
+        super.onBackPressed()
     }
 
     override fun onDestroy() {
