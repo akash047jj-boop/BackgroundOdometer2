@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > background-odometer-release.jks
 
-      - name: Build V13 release APK
+      - name: Build V12 release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
