@@ -80,6 +80,31 @@ class SettingsActivity : Activity() {
         }, full(58))
 
         space(root, 25)
+        root.addView(label("FUEL SETTINGS"), params())
+        root.addView(
+            value("Tank: %.2f L • Reserve: %.2f L".format(database.getTankCapacity(), database.getReserveFuel())),
+            params()
+        )
+        space(root, 10)
+        root.addView(button("CHANGE FUEL SETTINGS") {
+            showFuelSettingsDialog()
+        }, full(58))
+
+        space(root, 25)
+        root.addView(label("BACKGROUND TRACKING"), params())
+        val autoTracking = prefs.getBoolean("auto_tracking_enabled", false)
+        root.addView(
+            value(if (autoTracking) "AUTO TRACKING: ON" else "AUTO TRACKING: OFF"),
+            params()
+        )
+        space(root, 10)
+        root.addView(button(if (autoTracking) "DISABLE AUTO TRACKING" else "ENABLE AUTO TRACKING") {
+            prefs.edit().putBoolean("auto_tracking_enabled", !autoTracking).apply()
+            Toast.makeText(this, if (autoTracking) "Auto tracking disabled" else "Auto tracking enabled", Toast.LENGTH_SHORT).show()
+            buildUi()
+        }, full(58))
+
+        space(root, 25)
         root.addView(label("ODOMETER RESET"), params())
         root.addView(
             value("Resets the displayed total only. Trips and routes remain saved."),
@@ -111,11 +136,49 @@ class SettingsActivity : Activity() {
             openBatterySettings()
         }, full(58))
 
+        space(root, 25)
+        root.addView(button("BACK TO HOME") { finish() }, full(58))
+
         space(root, 35)
         root.addView(value("App by Potato's man"), params())
 
         scroll.addView(root, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         setContentView(scroll)
+    }
+
+    private fun showFuelSettingsDialog() {
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(30, 10, 30, 10)
+
+        val tank = EditText(this)
+        tank.hint = "Tank capacity (L)"
+        tank.inputType = 2 or 8192
+        tank.setText(database.getTankCapacity().toString())
+        layout.addView(tank, params())
+
+        val reserve = EditText(this)
+        reserve.hint = "Reserve fuel (L)"
+        reserve.inputType = 2 or 8192
+        reserve.setText(database.getReserveFuel().toString())
+        layout.addView(reserve, params())
+
+        AlertDialog.Builder(this)
+            .setTitle("FUEL SETTINGS")
+            .setView(layout)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("SAVE") { _, _ ->
+                val tankValue = tank.text.toString().toDoubleOrNull()
+                val reserveValue = reserve.text.toString().toDoubleOrNull()
+                if (tankValue == null || reserveValue == null || tankValue <= 0 || reserveValue < 0 || reserveValue >= tankValue) {
+                    Toast.makeText(this, "Invalid fuel settings", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                database.setFuelSettings(tankValue, reserveValue)
+                Toast.makeText(this, "Fuel settings saved", Toast.LENGTH_SHORT).show()
+                buildUi()
+            }
+            .show()
     }
 
     private fun showSpeedDialog() {
