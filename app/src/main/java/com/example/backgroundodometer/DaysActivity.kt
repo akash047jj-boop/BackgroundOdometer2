@@ -126,7 +126,7 @@ class DaysActivity : Activity() {
             val child = list.getChildAt(i)
             if (child !is LinearLayout || child.tag != "day:$date") continue
             child.background = dayBackground(selectedDate == date)
-            val row = child.getChildAt(0) as? LinearLayout ?: continue
+            val row = (child as? ViewGroup)?.getChildAt(0) as? LinearLayout ?: continue
             val selector = row.getChildAt(0) as? TextView ?: continue
             selector.text = if (selectedDate == date) "✓" else "□"
             selector.background = selectionBackground(selectedDate == date)
@@ -141,7 +141,7 @@ class DaysActivity : Activity() {
             val date = tag.removePrefix("day:")
             val selected = selectedDate == date
             child.background = dayBackground(selected)
-            val row = child.getChildAt(0) as? LinearLayout ?: continue
+            val row = (child as? ViewGroup)?.getChildAt(0) as? LinearLayout ?: continue
             val selector = row.getChildAt(0) as? TextView ?: continue
             selector.text = if (selected) "✓" else "□"
             selector.background = selectionBackground(selected)
