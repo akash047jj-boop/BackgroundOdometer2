@@ -23,15 +23,15 @@ android {
             35
 
         versionCode =
-            23
+            25
 
         versionName =
-            "23.0"
+            "25.0"
 
         buildConfigField(
             "String",
             "CARTO_API_KEY",
-            "\"${System.getenv("CARTO_API_KEY") ?: ""}\""
+            "\"${System.getenv(\"CARTO_API_KEY\") ?: \"\"}\""
         )
     }
 
