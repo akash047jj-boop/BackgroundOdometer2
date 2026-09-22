@@ -964,6 +964,145 @@ class OdometerDatabaseHelper(
         )
     }
 
+    fun createManualTrip(
+        date: String,
+        place: String,
+        distanceKm: Double,
+        startTime: Long = 0L,
+        endTime: Long = 0L
+    ): Long {
+        val parsedDate = try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)?.time
+                ?: System.currentTimeMillis()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
+        }
+
+        val effectiveStart = if (startTime > 0L) startTime else parsedDate
+        val effectiveEnd = if (endTime > 0L) endTime else 0L
+
+        val values = ContentValues().apply {
+            put("start_time", effectiveStart)
+            put("end_time", effectiveEnd)
+            put("distance_km", distanceKm.coerceAtLeast(0.0))
+            put("average_speed", 0.0)
+            put("max_speed", 0.0)
+            put("completed", 1)
+            put("gps_distance_km", 0.0)
+            put("road_distance_km", 0.0)
+            put("distance_source", "MANUAL")
+            put("matching_confidence", 1.0)
+            put("assigned_date", date)
+            put("assigned_place", place)
+        }
+
+        return writableDatabase.insert(TABLE_TRIPS, null, values)
+    }
+
+    fun updateTripAssignment(
+        tripId: Long,
+        date: String,
+        place: String
+    ): Boolean {
+        val values = ContentValues().apply {
+            put("assigned_date", date)
+            put("assigned_place", place)
+        }
+
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "id = ? AND completed = 1",
+            arrayOf(tripId.toString())
+        ) > 0
+    }
+
+    fun updateManualTrip(
+        tripId: Long,
+        date: String,
+        place: String,
+        distanceKm: Double,
+        startTime: Long,
+        endTime: Long
+    ): Boolean {
+        val existing = getTrip(tripId) ?: return false
+        if (!existing.distanceSource.equals("MANUAL", true)) return false
+
+        val parsedDate = try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)?.time
+                ?: existing.startTime
+        } catch (_: Exception) {
+            existing.startTime
+        }
+
+        val finalStart = if (startTime > 0L) startTime else parsedDate
+        val finalEnd = if (endTime > 0L) endTime else 0L
+
+        val values = ContentValues().apply {
+            put("start_time", finalStart)
+            put("end_time", finalEnd)
+            put("distance_km", distanceKm.coerceAtLeast(0.0))
+            put("assigned_date", date)
+            put("assigned_place", place)
+            put("gps_distance_km", 0.0)
+            put("road_distance_km", 0.0)
+            put("distance_source", "MANUAL")
+            put("matching_confidence", 1.0)
+        }
+
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "id = ? AND completed = 1",
+            arrayOf(tripId.toString())
+        ) > 0
+    }
+
+    fun updateDayRecord(
+        oldDate: String,
+        newDate: String,
+        place: String
+    ): Int {
+        val values = ContentValues().apply {
+            put("assigned_date", newDate)
+            put("assigned_place", place)
+        }
+
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "completed = 1 AND assigned_date = ?",
+            arrayOf(oldDate)
+        )
+    }
+
+    fun deleteDayRecord(date: String): Int {
+        val values = ContentValues().apply {
+            put("assigned_date", "")
+            put("assigned_place", "")
+        }
+
+        return writableDatabase.update(
+            TABLE_TRIPS,
+            values,
+            "completed = 1 AND assigned_date = ?",
+            arrayOf(date)
+        )
+    }
+
+    fun deleteTrip(tripId: Long): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.delete(TABLE_POINTS, "trip_id = ?", arrayOf(tripId.toString()))
+            val deleted = db.delete(TABLE_TRIPS, "id = ?", arrayOf(tripId.toString())) > 0
+            db.setTransactionSuccessful()
+            deleted
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun getAllTrips(): List<TripSummary> {
 
         val result =
