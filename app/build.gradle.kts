@@ -31,7 +31,7 @@ android {
         buildConfigField(
             "String",
             "CARTO_API_KEY",
-            "\"${System.getenv(\"CARTO_API_KEY\") ?: \"\"}\""
+            "\"${System.getenv("CARTO_API_KEY") ?: ""}\""
         )
     }
 
