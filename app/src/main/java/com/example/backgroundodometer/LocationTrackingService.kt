@@ -71,6 +71,24 @@ class LocationTrackingService : Service() {
         private const val MAX_SPEED =
             180.0
 
+        /*
+         * V25 movement gate.
+         * GPS ON alone is never enough to create a trip.
+         * A session must show sustained movement and
+         * meaningful displacement before a database trip exists.
+         */
+        private const val MOVEMENT_SPEED =
+            3.0
+
+        private const val MOVEMENT_STREAK_REQUIRED =
+            5
+
+        private const val MIN_MOVEMENT_DISTANCE_METERS =
+            20.0
+
+        private const val PRE_TRIP_BUFFER_SIZE =
+            12
+
         private const val PREFS =
             "background_odometer"
 
@@ -122,6 +140,23 @@ class LocationTrackingService : Service() {
 
     private var maximumSpeed =
         0.0
+
+    /*
+     * V25: points received before genuine movement is
+     * confirmed. These are kept only in memory and are
+     * never saved as a trip unless the movement gate opens.
+     */
+    private val preTripBuffer =
+        ArrayDeque<Location>()
+
+    private var movementStreak =
+        0
+
+    private var preTripAnchor: Location? =
+        null
+
+    private var movementConfirmed =
+        false
 
     private var locationReceiverRegistered =
         false
@@ -533,8 +568,10 @@ class LocationTrackingService : Service() {
             tracking =
                 true
 
+            resetMovementGate()
+
             updateNotification(
-                "GPS ON • waiting for location"
+                "GPS ON • waiting for movement"
             )
 
             sendStatus(
@@ -572,6 +609,8 @@ class LocationTrackingService : Service() {
 
         lastLocation =
             null
+
+        resetMovementGate()
 
         speeds.clear()
 
@@ -790,6 +829,8 @@ class LocationTrackingService : Service() {
         tripId =
             active.id
 
+        movementConfirmed = true
+
         speeds.clear()
 
         val points =
@@ -851,10 +892,7 @@ class LocationTrackingService : Service() {
     ) {
 
         /*
-         * The provider broadcast is the primary
-         * GPS ON/OFF detector.
-         *
-         * This second check is an extra safety net.
+         * GPS OFF is handled immediately.
          */
         if (
             !isLocationEnabled()
@@ -867,139 +905,135 @@ class LocationTrackingService : Service() {
             return
         }
 
-        if (
-            !location.hasAccuracy()
-        ) {
+        if (!location.hasAccuracy()) {
             return
         }
 
-        if (
-            location.accuracy >
-            MAX_ACCURACY
-        ) {
+        if (location.accuracy > MAX_ACCURACY) {
             return
         }
 
-        val previous =
-            lastLocation
+        val previous = lastLocation
 
-        if (
-            previous != null
-        ) {
+        if (previous != null) {
 
             val distance =
-                previous.distanceTo(
-                    location
-                )
+                previous.distanceTo(location)
 
             val seconds =
-                (
-                    location.time -
-                        previous.time
-                ) / 1000.0
+                (location.time - previous.time) / 1000.0
 
-            if (
-                seconds > 0
-            ) {
+            if (seconds > 0.0) {
 
                 val implied =
-                    (
-                        distance /
-                            seconds
-                    ) * 3.6
+                    distance / seconds * 3.6
 
                 if (
-                    distance >
-                    MAX_JUMP ||
-                    implied >
-                    MAX_SPEED
+                    distance > MAX_JUMP ||
+                    implied > MAX_SPEED
                 ) {
-
                     return
                 }
             }
         }
 
         val speed =
-            if (
-                location.hasSpeed()
-            ) {
-
-                maxOf(
-                    0.0,
-                    location.speed * 3.6
-                )
-
+            if (location.hasSpeed()) {
+                maxOf(0.0, location.speed * 3.6)
             } else {
-
                 0.0
             }
 
         /*
-         * A trip is created only when the first
-         * valid GPS point of a session arrives.
+         * V25: DO NOT create a database trip just because
+         * GPS produced a valid location.
          *
-         * Therefore GPS ON by itself does not
-         * create an empty trip.
+         * While the vehicle is stationary we keep only a
+         * tiny in-memory buffer. GPS drift in this phase can
+         * therefore never become a 0.02/0.20 km trip.
          */
-        if (
-            tripId == null
-        ) {
+        if (!movementConfirmed && tripId == null) {
 
-            tripId =
-                database.createTrip(
-                    location.time
-                )
+            updateMovementGate(
+                location,
+                speed
+            )
+
+            lastLocation = Location(location)
+
+            sendSpeedUpdate(speed)
+
+            updateNotification(
+                if (movementConfirmed) {
+                    "GPS ON • movement detected"
+                } else {
+                    "GPS ON • stationary / waiting"
+                }
+            )
+
+            sendStatus(
+                if (movementConfirmed) {
+                    "GPS ON • MOVEMENT DETECTED"
+                } else {
+                    "GPS ON • WAITING FOR MOVEMENT"
+                }
+            )
+
+            if (!movementConfirmed) {
+                return
+            }
+
+            /*
+             * Movement has now been confirmed. Create the
+             * real trip and save the buffered route points.
+             */
+            tripId = database.createTrip(
+                preTripBuffer.firstOrNull()?.time
+                    ?: location.time
+            )
 
             speeds.clear()
+            maximumSpeed = 0.0
 
-            maximumSpeed =
-                0.0
+            val id = tripId ?: return
+
+            for (buffered in preTripBuffer) {
+                database.addTrackPoint(
+                    tripId = id,
+                    latitude = buffered.latitude,
+                    longitude = buffered.longitude,
+                    time = buffered.time,
+                    speedKmh = if (buffered.hasSpeed()) {
+                        maxOf(0.0, buffered.speed * 3.6)
+                    } else {
+                        0.0
+                    },
+                    accuracy = buffered.accuracy.toDouble()
+                )
+            }
+
+            preTripBuffer.clear()
         }
 
-        val id =
-            tripId
-                ?: return
+        val id = tripId ?: return
 
         database.addTrackPoint(
-            tripId =
-                id,
-            latitude =
-                location.latitude,
-            longitude =
-                location.longitude,
-            time =
-                location.time,
-            speedKmh =
-                speed,
-            accuracy =
-                location.accuracy.toDouble()
+            tripId = id,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            time = location.time,
+            speedKmh = speed,
+            accuracy = location.accuracy.toDouble()
         )
 
-        speeds.add(
-            speed
-        )
+        speeds.add(speed)
 
-        if (
-            speed >
-            maximumSpeed
-        ) {
-
-            maximumSpeed =
-                speed
+        if (speed > maximumSpeed) {
+            maximumSpeed = speed
         }
 
         val average =
-            if (
-                speeds.isNotEmpty()
-            ) {
-
-                speeds.average()
-
-            } else {
-
-                0.0
-            }
+            if (speeds.isNotEmpty()) speeds.average() else 0.0
 
         database.updateTripSpeed(
             id,
@@ -1008,25 +1042,67 @@ class LocationTrackingService : Service() {
             location.time
         )
 
-        lastLocation =
-            Location(
-                location
-            )
+        lastLocation = Location(location)
 
-        sendSpeedUpdate(
-            speed
-        )
+        sendSpeedUpdate(speed)
 
         updateNotification(
-            "GPS ON • %.1f km/h"
-                .format(
-                    speed
-                )
+            "GPS ON • %.1f km/h".format(speed)
         )
 
         sendStatus(
             "GPS ON • TRACKING"
         )
+    }
+
+    private fun updateMovementGate(
+        location: Location,
+        speed: Double
+    ) {
+
+        if (preTripAnchor == null) {
+            preTripAnchor = Location(location)
+        }
+
+        preTripBuffer.addLast(Location(location))
+
+        while (preTripBuffer.size > PRE_TRIP_BUFFER_SIZE) {
+            preTripBuffer.removeFirst()
+        }
+
+        if (speed >= MOVEMENT_SPEED) {
+            movementStreak++
+        } else {
+            movementStreak = 0
+        }
+
+        val anchor = preTripAnchor
+        val displacement =
+            if (anchor != null) {
+                anchor.distanceTo(location).toDouble()
+            } else {
+                0.0
+            }
+
+        /*
+         * Genuine movement needs both sustained speed and
+         * meaningful displacement. This prevents GPS speed
+         * spikes while parked from opening a trip.
+         */
+        if (
+            movementStreak >= MOVEMENT_STREAK_REQUIRED &&
+            displacement >= MIN_MOVEMENT_DISTANCE_METERS
+        ) {
+            movementConfirmed = true
+        }
+    }
+
+    private fun resetMovementGate() {
+
+        preTripBuffer.clear()
+        movementStreak = 0
+        preTripAnchor = null
+        movementConfirmed = false
     }
 
     private fun finalizeTrip(
@@ -1072,6 +1148,19 @@ class LocationTrackingService : Service() {
                     id,
                     threshold
                 )
+
+            /*
+             * V25 safety net: a real trip must not finish as
+             * a tiny GPS-noise trip. Manual trips are unaffected
+             * because this code only handles automatic GPS trips.
+             */
+            if (gpsDistance < 0.03) {
+                database.discardTrip(id)
+                updateNotification(
+                    "No meaningful movement • trip discarded"
+                )
+                return
+            }
 
             updateNotification(
                 "Matching road route..."
@@ -1188,6 +1277,11 @@ class LocationTrackingService : Service() {
                     database.getTrackPoints(
                         id
                     )
+
+                if (gpsDistance < 0.03) {
+                    database.discardTrip(id)
+                    return
+                }
 
                 database.completeTripWithDistances(
                     tripId =
