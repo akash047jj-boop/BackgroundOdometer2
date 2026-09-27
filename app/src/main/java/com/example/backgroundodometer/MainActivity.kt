@@ -55,7 +55,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        private const val TIFFANY = "#00BCD4"
+        private const val GREEN = "#39D98A"
         private const val DARK = "#151515"
         private const val REQUEST_LOCATION = 100
         private const val REQUEST_NOTIFICATIONS = 101
@@ -115,7 +115,7 @@ class MainActivity : Activity() {
         root.addView(topBar, topBarParams)
         addSpace(root, 18)
 
-        root.addView(createLabel("TOTAL ODOMETER", TIFFANY), wrapParams())
+        root.addView(createLabel("TOTAL ODOMETER", GREEN), wrapParams())
         totalText = createLargeValue("0.00 km")
         root.addView(totalText, wrapParams())
 
@@ -162,7 +162,7 @@ class MainActivity : Activity() {
         fuelCard.orientation = LinearLayout.VERTICAL
         fuelCard.setPadding(16, 14, 16, 14)
         fuelCard.background = cardBackground()
-        fuelCard.addView(createLabel("FUEL", TIFFANY), wrapParams())
+        fuelCard.addView(createLabel("FUEL", GREEN), wrapParams())
         val fuelStatusRow = LinearLayout(this)
         fuelStatusRow.orientation = LinearLayout.HORIZONTAL
         fuelStatusRow.gravity = Gravity.CENTER_VERTICAL
@@ -765,7 +765,7 @@ class MainActivity : Activity() {
     private fun updateStatus(status: String) {
         statusText.text = "GPS STATUS\n$status"
         val lower = status.lowercase()
-        statusText.setTextColor(if (lower.contains("tracking") || lower.contains("gps on")) Color.parseColor(TIFFANY) else Color.LTGRAY)
+        statusText.setTextColor(if (lower.contains("tracking") || lower.contains("gps on")) Color.parseColor(GREEN) else Color.LTGRAY)
     }
 
     private fun isLocationEnabled(): Boolean {
@@ -826,7 +826,7 @@ class MainActivity : Activity() {
         }
         reserveStatusText.text = currentStatus
         reserveStatusText.background = statusBackground(below)
-        reserveStatusText.setTextColor(if (below) Color.WHITE else Color.parseColor(TIFFANY))
+        reserveStatusText.setTextColor(if (below) Color.WHITE else Color.parseColor(GREEN))
 
         belowReserveButton.visibility = View.VISIBLE
         when {
@@ -935,11 +935,11 @@ class MainActivity : Activity() {
     }
 
     private fun buttonBackground(active: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f; setColor(Color.parseColor(if (active) "#07383E" else DARK)); setStroke(2, Color.parseColor(TIFFANY))
+        cornerRadius = 18f; setColor(Color.parseColor(if (active) "#0B3325" else DARK)); setStroke(2, Color.parseColor(GREEN))
     }
 
     private fun statusBackground(active: Boolean) = GradientDrawable().apply {
-        cornerRadius = 14f; setColor(Color.parseColor(if (active) "#07383E" else "#101010")); setStroke(2, Color.parseColor(if (active) TIFFANY else "#444444"))
+        cornerRadius = 14f; setColor(Color.parseColor(if (active) "#0B3325" else "#101010")); setStroke(2, Color.parseColor(if (active) GREEN else "#444444"))
     }
 
     private fun wrapParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
