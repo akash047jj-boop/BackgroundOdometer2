@@ -20,7 +20,7 @@ import android.widget.Toast
 class SettingsActivity : Activity() {
     private lateinit var database: OdometerDatabaseHelper
     private val prefs by lazy { getSharedPreferences("background_odometer", MODE_PRIVATE) }
-    private val cyan = Color.rgb(0,188,212)
+    private val cyan = Color.rgb(57,217,138)
 
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); database = OdometerDatabaseHelper(this); buildUi() }
     override fun onResume() { super.onResume(); if (::database.isInitialized) buildUi() }
