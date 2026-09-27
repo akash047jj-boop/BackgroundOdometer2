@@ -16,6 +16,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -147,6 +148,7 @@ class TripsActivity : Activity() {
     private fun confirmDelete(id:Long){AlertDialog.Builder(this).setTitle("DELETE TRIP?").setMessage("This permanently deletes the trip and its saved route points.").setNegativeButton("CANCEL",null).setPositiveButton("DELETE"){_,_->database.deleteTrip(id);loadTrips();toast("Trip deleted")}.show()}
     private fun parseOptionalTime(date:String,text:String):Long{if(text.isBlank())return 0L;for(f in arrayOf("yyyy-MM-dd hh:mm a","yyyy-MM-dd HH:mm","yyyy-MM-dd h:mm a"))try{return SimpleDateFormat(f,Locale.US).parse(if(f.contains("a"))date+" "+text.uppercase(Locale.US) else date+" "+text)?.time?:0L}catch(_:Exception){};return 0L}
     private fun saveSelectedDate(){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(SELECTED_DATE,selectedDate).apply()}
+    private fun toast(message: String) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
     private fun today()=SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Date())
     private fun formatDate(v:String)=try{SimpleDateFormat("dd MMMM yyyy",Locale.getDefault()).format(SimpleDateFormat("yyyy-MM-dd",Locale.US).parse(v)!!)}catch(_:Exception){v}
     private fun formatTime(t:Long)=SimpleDateFormat("hh:mm a",Locale.getDefault()).format(Date(t))
