@@ -23,10 +23,10 @@ android {
             35
 
         versionCode =
-            25
+            26
 
         versionName =
-            "25.0"
+            "26.0"
 
         buildConfigField(
             "String",
