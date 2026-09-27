@@ -29,7 +29,7 @@ class TripsActivity : Activity() {
     private val selectedIds = mutableSetOf<Long>()
 
     companion object {
-        private const val TIFFANY = "#00BCD4"
+        private const val TIFFANY = "#39D98A"
         private const val CARD = "#151515"
     }
 
@@ -107,8 +107,8 @@ class TripsActivity : Activity() {
             setPadding(14, 14, 14, 14)
             background = GradientDrawable().apply {
                 cornerRadius = 18f
-                setColor(if (selected) Color.parseColor("#102F33") else Color.parseColor(CARD))
-                setStroke(2, if (selected) Color.parseColor(TIFFANY) else Color.DKGRAY)
+                setColor(if (selected) Color.parseColor("#102E22") else Color.parseColor(CARD))
+                setStroke(2, if (selected) Color.parseColor(TIFFANY) else Color.rgb(55,65,58))
             }
         }
 
