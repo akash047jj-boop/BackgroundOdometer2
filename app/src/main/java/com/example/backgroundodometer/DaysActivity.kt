@@ -29,7 +29,7 @@ class DaysActivity : Activity() {
     private var selectedDate: String? = null
 
     companion object {
-        private const val TIFFANY = "#00BCD4"
+        private const val TIFFANY = "#39D98A"
         private const val CARD = "#151515"
     }
 
@@ -568,7 +568,7 @@ class DaysActivity : Activity() {
 
     private fun dayBackground(selected: Boolean) = GradientDrawable().apply {
         cornerRadius = 20f
-        setColor(if (selected) Color.parseColor("#102F33") else Color.parseColor(CARD))
+        setColor(if (selected) Color.parseColor("#102E22") else Color.parseColor(CARD))
         setStroke(2, if (selected) Color.parseColor(TIFFANY) else Color.DKGRAY)
     }
 
