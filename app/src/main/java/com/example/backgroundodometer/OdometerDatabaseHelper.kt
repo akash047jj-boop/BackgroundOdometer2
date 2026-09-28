@@ -817,6 +817,24 @@ class OdometerDatabaseHelper(
             "id = ?",
             arrayOf(tripId.toString())
         )
+
+        // GPS trips are automatically assigned to the local calendar day
+        // on which the trip started. Only fill the date when it is still
+        // blank, so a user-selected/reassigned date is never overwritten.
+        writableDatabase.execSQL(
+            """
+            UPDATE trips
+            SET assigned_date = date(
+                start_time / 1000,
+                'unixepoch',
+                'localtime'
+            )
+            WHERE id = ?
+              AND completed = 1
+              AND (assigned_date IS NULL OR assigned_date = '')
+            """.trimIndent(),
+            arrayOf(tripId.toString())
+        )
     }
 
     fun calculateGpsDistance(
@@ -2171,6 +2189,25 @@ class OdometerDatabaseHelper(
         try {
             db.execSQL(
                 "PRAGMA foreign_keys=ON"
+            )
+        } catch (_: Exception) {
+        }
+
+        // V26 repair: older GPS trips were completed correctly but could
+        // have an empty assigned_date. Backfill only blank dates using the
+        // trip start date, while preserving any date the user already chose.
+        try {
+            db.execSQL(
+                """
+                UPDATE trips
+                SET assigned_date = date(
+                    start_time / 1000,
+                    'unixepoch',
+                    'localtime'
+                )
+                WHERE completed = 1
+                  AND (assigned_date IS NULL OR assigned_date = '')
+                """.trimIndent()
             )
         } catch (_: Exception) {
         }
