@@ -627,6 +627,120 @@ class OdometerDatabaseHelper(
         return writableDatabase.insert(TABLE_TRIPS, null, values)
     }
 
+
+    fun createManualRouteTrip(
+        date: String,
+        place: String,
+        distanceKm: Double,
+        routePoints: List<Pair<Double, Double>>,
+        startTime: Long = 0L,
+        endTime: Long = 0L
+    ): Long {
+        return saveManualRouteTrip(
+            -1L,
+            date,
+            place,
+            distanceKm,
+            routePoints,
+            startTime,
+            endTime
+        )
+    }
+
+    fun updateManualRouteTrip(
+        tripId: Long,
+        date: String,
+        place: String,
+        distanceKm: Double,
+        routePoints: List<Pair<Double, Double>>,
+        startTime: Long,
+        endTime: Long
+    ): Long {
+        return saveManualRouteTrip(
+            tripId,
+            date,
+            place,
+            distanceKm,
+            routePoints,
+            startTime,
+            endTime
+        )
+    }
+
+    private fun saveManualRouteTrip(
+        tripId: Long,
+        date: String,
+        place: String,
+        distanceKm: Double,
+        routePoints: List<Pair<Double, Double>>,
+        startTime: Long,
+        endTime: Long
+    ): Long {
+        val db = writableDatabase
+        val parsedDate = try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)?.time
+                ?: System.currentTimeMillis()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
+        }
+        val effectiveStart = if (startTime > 0L) startTime else parsedDate
+        val effectiveEnd = if (endTime > 0L) endTime else effectiveStart
+
+        db.beginTransaction()
+        try {
+            val id = if (tripId > 0L) {
+                val values = ContentValues()
+                values.put("start_time", effectiveStart)
+                values.put("end_time", effectiveEnd)
+                values.put("distance_km", distanceKm.coerceAtLeast(0.0))
+                values.put("average_speed", 0.0)
+                values.put("max_speed", 0.0)
+                values.put("completed", 1)
+                values.put("gps_distance_km", 0.0)
+                values.put("road_distance_km", distanceKm.coerceAtLeast(0.0))
+                values.put("distance_source", "MANUAL_ROUTE")
+                values.put("matching_confidence", 1.0)
+                values.put("assigned_date", date)
+                values.put("assigned_place", place)
+                db.update(TABLE_TRIPS, values, "id = ?", arrayOf(tripId.toString()))
+                db.delete(TABLE_POINTS, "trip_id = ?", arrayOf(tripId.toString()))
+                tripId
+            } else {
+                val values = ContentValues()
+                values.put("start_time", effectiveStart)
+                values.put("end_time", effectiveEnd)
+                values.put("distance_km", distanceKm.coerceAtLeast(0.0))
+                values.put("average_speed", 0.0)
+                values.put("max_speed", 0.0)
+                values.put("completed", 1)
+                values.put("gps_distance_km", 0.0)
+                values.put("road_distance_km", distanceKm.coerceAtLeast(0.0))
+                values.put("distance_source", "MANUAL_ROUTE")
+                values.put("matching_confidence", 1.0)
+                values.put("assigned_date", date)
+                values.put("assigned_place", place)
+                db.insertOrThrow(TABLE_TRIPS, null, values)
+            }
+
+            val baseTime = effectiveStart
+            routePoints.forEachIndexed { index, point ->
+                val values = ContentValues()
+                values.put("trip_id", id)
+                values.put("latitude", point.first)
+                values.put("longitude", point.second)
+                values.put("time", baseTime + index * 1000L)
+                values.put("speed_kmh", 0.0)
+                values.put("accuracy", 0.0)
+                db.insert(TABLE_POINTS, null, values)
+            }
+
+            db.setTransactionSuccessful()
+            return id
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun getActiveTrip(): TripSummary? {
 
         val cursor =
