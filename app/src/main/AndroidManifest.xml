@@ -65,6 +65,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ManualRouteActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".SettingsActivity"
             android:exported="false" />
 
