@@ -66,7 +66,10 @@ class ManualRouteActivity : Activity() {
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = "BackgroundOdometer/27.0 (Android; com.example.backgroundodometer)"
         buildScreen()
-        if (tripId > 0L) loadExistingTrip() else centerDefault()
+        if (tripId > 0L) loadExistingTrip() else {
+            placeText.setText(intent.getStringExtra("place") ?: "")
+            centerDefault()
+        }
     }
 
     private fun buildScreen() {
