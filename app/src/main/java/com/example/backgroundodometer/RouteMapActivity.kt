@@ -495,7 +495,31 @@ class RouteMapActivity : Activity() {
 
                     if (rawPoints.isEmpty()) {
                         statusText.text =
-                            "NO GPS ROUTE RECORDED"
+                            if (trip.distanceSource.equals("MANUAL_ROUTE", true))
+                                "NO SAVED MANUAL ROUTE"
+                            else
+                                "NO GPS ROUTE RECORDED"
+                        return@post
+                    }
+
+                    if (trip.distanceSource.equals("MANUAL_ROUTE", true)) {
+                        val manualPoints =
+                            rawPoints.map {
+                                GeoPoint(
+                                    it.latitude,
+                                    it.longitude
+                                )
+                            }
+
+                        distanceText.text =
+                            String.format(
+                                Locale.US,
+                                "ROAD DISTANCE: %.2f km",
+                                trip.distanceKm
+                            )
+
+                        drawRoadRoute(manualPoints)
+                        statusText.text = "MANUAL ROAD ROUTE"
                         return@post
                     }
 
