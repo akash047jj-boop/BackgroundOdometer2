@@ -220,7 +220,7 @@ class ManualRouteActivity : Activity() {
             } catch (e: Exception) {
                 mainHandler.post {
                     status.text = "ROUTING FAILED"
-                    Toast.makeText(this, "Could not calculate road route: \${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Could not calculate road route: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show()
                 }
             }
         }
