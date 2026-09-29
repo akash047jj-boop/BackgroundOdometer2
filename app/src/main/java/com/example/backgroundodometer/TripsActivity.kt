@@ -76,16 +76,16 @@ class TripsActivity : Activity() {
     }
 
     private fun addTrip(trip:TripSummary){
-        val manual=trip.distanceSource.equals("MANUAL",true)
+        val manual=trip.distanceSource.equals("MANUAL",true) || trip.distanceSource.equals("MANUAL_ROUTE",true)
         val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(16),dp(16),dp(16));background=cardBackground()}
         card.addView(label(if(manual)"MANUAL TRIP" else "GPS TRIP"),full())
         card.addView(big("%.2f km".format(Locale.US,trip.distanceKm)),full())
-        card.addView(info(if(manual)"Manual distance" else "Average %.1f km/h  •  Max %.1f km/h".format(Locale.US,trip.averageSpeed,trip.maxSpeed)),full())
+        card.addView(info(if(trip.distanceSource.equals("MANUAL_ROUTE",true)) "Manual road route" else if(manual) "Manual distance" else "Average %.1f km/h  •  Max %.1f km/h".format(Locale.US,trip.averageSpeed,trip.maxSpeed)),full())
         val time=if(trip.endTime>0)formatTime(trip.startTime)+" → "+formatTime(trip.endTime) else formatTime(trip.startTime)
         card.addView(info(time),full())
         if(trip.assignedPlace.isNotBlank())card.addView(info(trip.assignedPlace),full())
         space(card,8)
-        card.addView(action("EDIT THIS TRIP"){showEditTripDialog(trip.id)},buttonParams())
+        card.addView(action(if(trip.distanceSource.equals("MANUAL_ROUTE",true)) "EDIT ROUTE" else "EDIT THIS TRIP"){ if(trip.distanceSource.equals("MANUAL_ROUTE",true)) startActivity(Intent(this,ManualRouteActivity::class.java).apply{putExtra("trip_id",trip.id)}) else showEditTripDialog(trip.id)},buttonParams())
         card.addView(action("VIEW DETAILS"){startActivity(Intent(this,TripDetailActivity::class.java).apply{putExtra("trip_id",trip.id)})},buttonParams())
         card.addView(action("DELETE THIS TRIP"){confirmDelete(trip.id)},buttonParams())
         val p=full();p.bottomMargin=dp(10);list.addView(card,p)
@@ -136,13 +136,23 @@ class TripsActivity : Activity() {
         val start=EditText(this).apply{hint="Start time (optional)"}
         val end=EditText(this).apply{hint="End time (optional)"}
         layout.addView(info("DAY"),full());layout.addView(date,full());layout.addView(place,full());layout.addView(distance,full());layout.addView(start,full());layout.addView(end,full())
-        AlertDialog.Builder(this).setTitle("ADD MANUAL TRIP").setView(layout).setNegativeButton("CANCEL",null).setPositiveButton("SAVE"){_,_->
-            val km=distance.text.toString().toDoubleOrNull()
-            if(km==null||km<0){toast("Enter a valid distance.");return@setPositiveButton}
-            val d=date.text.toString()
-            database.createManualTrip(d,place.text.toString().trim(),km,parseOptionalTime(d,start.text.toString()),parseOptionalTime(d,end.text.toString()))
-            selectedDate=d;saveSelectedDate();loadTrips();toast("Manual trip added")
-        }.show()
+        AlertDialog.Builder(this)
+            .setTitle("ADD MANUAL TRIP")
+            .setView(layout)
+            .setNegativeButton("CANCEL",null)
+            .setNeutralButton("DRAW / MARK ROUTE"){_,_->
+                startActivity(Intent(this,ManualRouteActivity::class.java).apply{
+                    putExtra("date",date.text.toString())
+                    putExtra("place",place.text.toString().trim())
+                })
+            }
+            .setPositiveButton("SAVE DISTANCE"){_,_->
+                val km=distance.text.toString().toDoubleOrNull()
+                if(km==null||km<0){toast("Enter a valid distance.");return@setPositiveButton}
+                val d=date.text.toString()
+                database.createManualTrip(d,place.text.toString().trim(),km,parseOptionalTime(d,start.text.toString()),parseOptionalTime(d,end.text.toString()))
+                selectedDate=d;saveSelectedDate();loadTrips();toast("Manual trip added")
+            }.show()
     }
 
     private fun confirmDelete(id:Long){AlertDialog.Builder(this).setTitle("DELETE TRIP?").setMessage("This permanently deletes the trip and its saved route points.").setNegativeButton("CANCEL",null).setPositiveButton("DELETE"){_,_->database.deleteTrip(id);loadTrips();toast("Trip deleted")}.show()}
