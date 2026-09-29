@@ -140,7 +140,7 @@ class ManualRouteActivity : Activity() {
         if (!drawingMode) {
             if (event.action == MotionEvent.ACTION_DOWN) { lastTouchX = event.x; lastTouchY = event.y }
             else if (event.action == MotionEvent.ACTION_UP) {
-                val moved = hypot(event.x - lastTouchX, event.y - lastTouchY)
+                val moved = hypot((event.x - lastTouchX).toDouble(), (event.y - lastTouchY).toDouble())
                 if (moved < dp(24)) {
                     val p = map.projection.fromPixels(event.x.toInt(), event.y.toInt())
                     markedPoints.add(GeoPoint(p.latitude, p.longitude)); routePoints.clear(); redrawMarked()
@@ -173,7 +173,7 @@ class ManualRouteActivity : Activity() {
         if (currentStroke.isEmpty()) { currentStroke.add(GeoPoint(p.latitude, p.longitude)); return }
         val last = currentStroke.last()
         val px = map.projection.toPixels(last, null)
-        if (hypot(x - px.x, y - px.y) >= dp(12)) currentStroke.add(GeoPoint(p.latitude, p.longitude))
+        if (hypot((x - px.x).toDouble(), (y - px.y).toDouble()) >= dp(12)) currentStroke.add(GeoPoint(p.latitude, p.longitude))
     }
 
     private fun downsample(points: List<GeoPoint>, max: Int): List<GeoPoint> {
