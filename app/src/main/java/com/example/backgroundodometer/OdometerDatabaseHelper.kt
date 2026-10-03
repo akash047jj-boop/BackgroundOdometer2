@@ -1677,7 +1677,8 @@ class OdometerDatabaseHelper(
      * exact reference (FULL or confirmed marker) is created.
      */
     fun getCurrentFuel(): Double? {
-        if (getConfirmedMileage() <= 0.0) return null
+        val confirmedMileage = getConfirmedMileage()
+        if (confirmedMileage <= 0.0) return null
 
         val records = getFuelRecords().sortedBy { it.time }
         if (records.isEmpty()) return null
@@ -1685,59 +1686,72 @@ class OdometerDatabaseHelper(
         val capacity = getTankCapacity()
         val reserve = getReserveFuel()
 
+        /*
+         * Every fuel record that contains an exact fuel_after_litres value is
+         * now treated as the latest known fuel reference. This is important
+         * for PARTIAL refuels: if the rider records "Fuel after 5.13 L",
+         * that exact value must remain the basis for the Home screen.
+         *
+         * Older versions reconstructed the level from the previous FULL or
+         * BELOW-RESERVE marker and could therefore replace an explicitly
+         * recorded value (for example 5.13 L) with a different value.
+         */
         var referenceIndex = -1
         var fuel = 0.0
 
         for (i in records.indices) {
             val record = records[i]
-            val isMarker = record.litresAdded <= 0.0 &&
-                record.fuelStatus.equals("BELOW", true)
-
-            when {
-                isMarker -> {
-                    referenceIndex = i
-                    fuel = reserve
-                }
-                record.tankLevel.equals("FULL", true) -> {
-                    referenceIndex = i
-                    fuel = capacity
-                }
+            if (record.fuelAfterLitres >= 0.0) {
+                referenceIndex = i
+                fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
             }
         }
 
         if (referenceIndex < 0) return null
 
+        /*
+         * A later record without an exact fuel level means the current exact
+         * level is unknown. Known records become the new exact reference.
+         */
         for (i in (referenceIndex + 1) until records.size) {
             val record = records[i]
-            val isMarker = record.litresAdded <= 0.0 &&
-                record.fuelStatus.equals("BELOW", true)
 
             when {
-                isMarker -> {
+                record.fuelAfterLitres >= 0.0 -> {
+                    fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
+                    referenceIndex = i
+                }
+                record.litresAdded <= 0.0 &&
+                    record.fuelStatus.equals("BELOW", true) -> {
                     fuel = reserve
+                    referenceIndex = i
                 }
                 record.tankLevel.equals("FULL", true) -> {
                     fuel = capacity
+                    referenceIndex = i
                 }
                 record.fuelStatus.equals("BELOW", true) -> {
-                    // We know only that it is below reserve, not the exact litres.
                     return null
                 }
                 else -> {
-                    fuel += record.litresAdded
-                    fuel = fuel.coerceIn(0.0, capacity)
+                    fuel = (fuel + record.litresAdded).coerceIn(0.0, capacity)
                 }
             }
         }
 
-        val latestReference = records.lastOrNull() ?: return null
-        val distanceSinceLatestEvent = maxOf(
+        /*
+         * The latest exact fuel record is already recorded at its odometer
+         * reading. Consume only the distance travelled after that reference.
+         * This keeps the explicitly recorded "Fuel after" value visible and
+         * prevents an older reserve/full reference from overriding it.
+         */
+        val latestKnownReference = records[referenceIndex]
+        val distanceSinceReference = maxOf(
             0.0,
-            getTotalOdometer() - latestReference.odometerKm
+            getTotalOdometer() - latestKnownReference.odometerKm
         )
+        val consumed = distanceSinceReference / confirmedMileage
 
-        // Consume fuel from the reconstructed level using CONFIRMED mileage.
-        val consumed = distanceSinceLatestEvent / getConfirmedMileage()
         return (fuel - consumed).coerceIn(0.0, capacity)
     }
 

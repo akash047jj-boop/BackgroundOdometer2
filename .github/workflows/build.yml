@@ -1,4 +1,4 @@
-name: Build Background Odometer V26
+name: Build Background Odometer V28
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > background-odometer-release.jks
 
-      - name: Build V26 release APK
+      - name: Build V28 release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -43,8 +43,8 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Upload V26 APK
+      - name: Upload V28 APK
         uses: actions/upload-artifact@v4
         with:
-          name: background-odometer-v26
+          name: background-odometer-v28
           path: app/build/outputs/apk/release/app-release.apk
