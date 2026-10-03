@@ -1734,7 +1734,11 @@ class OdometerDatabaseHelper(
                     return null
                 }
                 else -> {
-                    fuel = (fuel + record.litresAdded).coerceIn(0.0, capacity)
+                    // A PARTIAL refill without an exact recorded fuel-after
+                    // value cannot safely be reconstructed. Keep the Home
+                    // screen explicit rather than displaying a misleading
+                    // calculated fuel level.
+                    return null
                 }
             }
         }
