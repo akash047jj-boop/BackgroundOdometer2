@@ -1713,6 +1713,12 @@ class OdometerDatabaseHelper(
             if (record.fuelAfterLitres >= 0.0 && !isBelowMarker) {
                 referenceIndex = i
                 fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
+            } else if (isBelowMarker && referenceIndex < 0) {
+                // If there is no stronger exact reference, use the earliest
+                // confirmed reserve point as the starting baseline and replay
+                // later distance/refuelling events from it.
+                referenceIndex = i
+                fuel = reserve
             }
         }
 
