@@ -1740,8 +1740,15 @@ class OdometerDatabaseHelper(
                 }
                 record.litresAdded <= 0.0 &&
                     record.fuelStatus.equals("BELOW", true) -> {
-                    // Marking BELOW RESERVE confirms status; it does not mean
-                    // the tank contains exactly the configured reserve amount.
+                    // A marker is an odometer checkpoint. Consume fuel used
+                    // since the previous reference before moving the reference
+                    // forward; never replace the actual level with reserve litres.
+                    val distanceToMarker = maxOf(
+                        0.0,
+                        record.odometerKm - records[referenceIndex].odometerKm
+                    )
+                    fuel = (fuel - distanceToMarker / confirmedMileage)
+                        .coerceIn(0.0, capacity)
                     referenceIndex = i
                 }
                 record.litresAdded > 0.0 -> {
