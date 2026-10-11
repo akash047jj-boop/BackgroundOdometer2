@@ -1704,7 +1704,13 @@ class OdometerDatabaseHelper(
 
         for (i in records.indices) {
             val record = records[i]
-            if (record.fuelAfterLitres >= 0.0) {
+            // A rider-confirmed BELOW marker is a status/mileage event,
+            // not an exact fuel quantity. Do not let its stored fallback value
+            // overwrite a more accurate level reconstructed from earlier fuel.
+            val isBelowMarker =
+                record.litresAdded <= 0.0 &&
+                    record.fuelStatus.equals("BELOW", true)
+            if (record.fuelAfterLitres >= 0.0 && !isBelowMarker) {
                 referenceIndex = i
                 fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
             }
@@ -1720,13 +1726,27 @@ class OdometerDatabaseHelper(
             val record = records[i]
 
             when {
-                record.fuelAfterLitres >= 0.0 -> {
+                record.fuelAfterLitres >= 0.0 &&
+                    !(record.litresAdded <= 0.0 &&
+                        record.fuelStatus.equals("BELOW", true)) -> {
                     fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
                     referenceIndex = i
                 }
                 record.litresAdded <= 0.0 &&
                     record.fuelStatus.equals("BELOW", true) -> {
-                    fuel = reserve
+                    // Marking BELOW RESERVE confirms status; it does not mean
+                    // the tank contains exactly the configured reserve amount.
+                    referenceIndex = i
+                }
+                record.litresAdded > 0.0 -> {
+                    // Replay partial refuelling from the previous known point.
+                    // Account for distance first, then add the entered litres.
+                    val distanceToRefuel = maxOf(
+                        0.0,
+                        record.odometerKm - records[referenceIndex].odometerKm
+                    )
+                    fuel = (fuel - distanceToRefuel / confirmedMileage + record.litresAdded)
+                        .coerceIn(0.0, capacity)
                     referenceIndex = i
                 }
                 record.tankLevel.equals("FULL", true) -> {
@@ -1894,7 +1914,9 @@ class OdometerDatabaseHelper(
 
         val now = System.currentTimeMillis()
         val currentFuel = getCurrentFuel()
-        val markerFuel = currentFuel?.let { minOf(it, getReserveFuel()) } ?: getReserveFuel()
+        // The marker confirms reserve status, not an exact reserve quantity.
+        // Preserve the calculated amount (e.g. 2.4 L) instead of snapping it to 3.2 L.
+        val markerFuel = currentFuel ?: getReserveFuel()
         val values = ContentValues()
         values.put("time", now)
         values.put("odometer_km", getTotalOdometer())
