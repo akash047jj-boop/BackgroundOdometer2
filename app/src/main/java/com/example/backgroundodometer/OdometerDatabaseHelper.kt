@@ -1439,8 +1439,11 @@ class OdometerDatabaseHelper(
         // mileage. Until a confirmed mileage reference exists, the value is unknown.
         val after: Double = when {
             normalizedTank == "FULL" -> capacity
-            normalizedStatus == "BELOW" -> -1.0
+            // A partial refill still increases the known fuel level even when
+            // the tank remains below reserve. BELOW describes the resulting
+            // reserve status; it must not discard the arithmetic fuel level.
             before != null -> (before + litres).coerceIn(0.0, capacity)
+            normalizedStatus == "BELOW" -> -1.0
             else -> -1.0
         }
 
