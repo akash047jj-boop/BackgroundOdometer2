@@ -2229,7 +2229,7 @@ class OdometerDatabaseHelper(
         val capacity = getTankCapacity()
         val reserve = getReserveFuel()
         val cursor = db.rawQuery(
-            "SELECT id, litres_added, fuel_status, tank_level FROM fuel_records ORDER BY time ASC, id ASC",
+            "SELECT id, litres_added, fuel_status, tank_level, fuel_after_litres FROM fuel_records ORDER BY time ASC, id ASC",
             null
         )
         val updates = mutableListOf<Pair<Long, Double>>()
@@ -2239,8 +2239,13 @@ class OdometerDatabaseHelper(
                 val litres = it.getDouble(1)
                 val status = it.getString(2) ?: "ABOVE"
                 val tankLevel = it.getString(3) ?: "PARTIAL"
+                val existingFuelAfter = it.getDouble(4)
                 val value = when {
-                    litres <= 0.0 && status.equals("BELOW", true) -> reserve
+                    // A below-reserve marker confirms status at the current
+                    // calculated level; it must not reset the level to the
+                    // configured reserve amount (e.g. 3.2 L).
+                    litres <= 0.0 && status.equals("BELOW", true) ->
+                        existingFuelAfter.takeIf { amount -> amount >= 0.0 } ?: reserve
                     tankLevel.equals("FULL", true) -> capacity
                     else -> -1.0
                 }
