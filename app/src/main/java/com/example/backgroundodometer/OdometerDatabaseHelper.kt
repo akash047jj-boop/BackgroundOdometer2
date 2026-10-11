@@ -1704,13 +1704,14 @@ class OdometerDatabaseHelper(
 
         for (i in records.indices) {
             val record = records[i]
-            // A rider-confirmed BELOW marker is a status/mileage event,
-            // not an exact fuel quantity. Do not let its stored fallback value
-            // overwrite a more accurate level reconstructed from earlier fuel.
+            // A marker's fuel_after_litres is captured from the live estimate
+            // at the moment the rider confirms BELOW RESERVE. Treat that value
+            // as an exact checkpoint; the status must never replace it with the
+            // configured reserve amount.
             val isBelowMarker =
                 record.litresAdded <= 0.0 &&
                     record.fuelStatus.equals("BELOW", true)
-            if (record.fuelAfterLitres >= 0.0 && !isBelowMarker) {
+            if (record.fuelAfterLitres >= 0.0) {
                 referenceIndex = i
                 fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
             } else if (isBelowMarker && referenceIndex < 0) {
@@ -1732,9 +1733,7 @@ class OdometerDatabaseHelper(
             val record = records[i]
 
             when {
-                record.fuelAfterLitres >= 0.0 &&
-                    !(record.litresAdded <= 0.0 &&
-                        record.fuelStatus.equals("BELOW", true)) -> {
+                record.fuelAfterLitres >= 0.0 -> {
                     fuel = record.fuelAfterLitres.coerceIn(0.0, capacity)
                     referenceIndex = i
                 }
