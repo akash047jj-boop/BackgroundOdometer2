@@ -1,5 +1,5 @@
-name: Build Background Odometer V28
-# V28 fuel reference fix build
+name: Build Background Odometer V31
+# V31 reserve confirmation threshold fix
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > background-odometer-release.jks
 
-      - name: Build V28 release APK
+      - name: Build V31 release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -44,8 +44,8 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Upload V28 APK
+      - name: Upload V31 APK
         uses: actions/upload-artifact@v4
         with:
-          name: background-odometer-v28
+          name: background-odometer-v31
           path: app/build/outputs/apk/release/app-release.apk
