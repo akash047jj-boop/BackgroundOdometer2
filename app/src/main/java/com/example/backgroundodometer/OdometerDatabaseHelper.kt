@@ -1926,9 +1926,17 @@ class OdometerDatabaseHelper(
 
         val now = System.currentTimeMillis()
         val currentFuel = getCurrentFuel()
-        // The marker confirms reserve status, not an exact reserve quantity.
-        // Preserve the calculated amount (e.g. 2.4 L) instead of snapping it to 3.2 L.
-        val markerFuel = currentFuel ?: getReserveFuel()
+        val reserveFuel = getReserveFuel()
+        /*
+         * A manual reserve confirmation means the vehicle has reached its
+         * configured reserve threshold. If the live estimate is still above
+         * reserve (for example 3.60 L while reserve is 3.20 L), snap the
+         * checkpoint down to reserve. If the estimate is already below reserve
+         * (for example 2.26 L), preserve that lower value rather than raising it.
+         */
+        val markerFuel = currentFuel?.let { fuel ->
+            if (fuel > reserveFuel) reserveFuel else fuel
+        } ?: reserveFuel
         val values = ContentValues()
         values.put("time", now)
         values.put("odometer_km", getTotalOdometer())
