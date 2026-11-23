@@ -1874,24 +1874,57 @@ class OdometerDatabaseHelper(
     }
 
     /**
-     * Mileage for the active FULL-to-current-fuel cycle.
-     * Includes partial top-ups since the latest FULL event.
-     * Returns zero when the fuel level cannot be reconstructed.
+     * Current mileage is measured using reserve-to-reserve cycles, not FULL tanks.
+     *
+     * A rider-confirmed BELOW-RESERVE marker is the cycle boundary:
+     * - After a reserve marker, refuelling ABOVE RESERVE starts the next cycle.
+     * - While that cycle is active, fuel consumed is fuel added since the marker
+     *   minus fuel still remaining above the configured reserve.
+     * - When the rider marks BELOW RESERVE again, the completed cycle is measured
+     *   from the previous reserve marker to the new one using all fuel added
+     *   between those two checkpoints.
+     *
+     * At least two reserve checkpoints are needed for a completed-cycle result.
      */
     fun getCurrentCycleMileage(): Double {
         val records = getFuelRecords().sortedBy { it.time }
-        val latestFull = records.lastOrNull {
-            it.litresAdded > 0.0 && it.tankLevel.equals("FULL", true)
-        } ?: return 0.0
+        val reserveMarkers = records.filter {
+            it.litresAdded <= 0.0 && it.fuelStatus.equals("BELOW", true)
+        }
+        val latestMarker = reserveMarkers.lastOrNull() ?: return 0.0
+        val previousMarker = reserveMarkers.dropLast(1).lastOrNull()
+        val latestRecord = records.lastOrNull() ?: return 0.0
 
+        // If the latest event is a reserve marker, show the just-completed
+        // reserve-to-reserve cycle.
+        if (latestRecord.id == latestMarker.id) {
+            previousMarker ?: return 0.0
+            val distance = latestMarker.odometerKm - previousMarker.odometerKm
+            val fuelUsed = records
+                .filter {
+                    it.time > previousMarker.time &&
+                        it.time <= latestMarker.time &&
+                        it.litresAdded > 0.0
+                }
+                .sumOf { it.litresAdded }
+            return if (distance > 0.0 && fuelUsed > 0.05) {
+                distance / fuelUsed
+            } else {
+                0.0
+            }
+        }
+
+        // Otherwise calculate the active cycle since the most recent reserve
+        // checkpoint. The remaining fuel above reserve has not yet been consumed.
         val currentFuel = getCurrentFuel() ?: return 0.0
-        val distance = getTotalOdometer() - latestFull.odometerKm
+        val distance = getTotalOdometer() - latestMarker.odometerKm
         if (distance <= 0.0) return 0.0
 
-        val topUpsSinceFull = records
-            .filter { it.time > latestFull.time && it.litresAdded > 0.0 }
+        val fuelAdded = records
+            .filter { it.time > latestMarker.time && it.litresAdded > 0.0 }
             .sumOf { it.litresAdded }
-        val fuelConsumed = getTankCapacity() + topUpsSinceFull - currentFuel
+        val fuelStillAboveReserve = maxOf(0.0, currentFuel - getReserveFuel())
+        val fuelConsumed = fuelAdded - fuelStillAboveReserve
         return if (fuelConsumed > 0.05) distance / fuelConsumed else 0.0
     }
 
