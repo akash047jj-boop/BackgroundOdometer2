@@ -22,9 +22,9 @@ android {
         targetSdk =
             35
 
-        versionCode = 32
+        versionCode = 33
 
-        versionName = "32.0"
+        versionName = "33.0"
 
         buildConfigField(
             "String",
