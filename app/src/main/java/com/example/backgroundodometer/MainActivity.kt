@@ -176,10 +176,10 @@ class MainActivity : Activity() {
         rangeText = createLabel("Range: --", "#AAAAAA")
         fuelCard.addView(rangeText, wrapParams())
 
-        estimatedMileageText = createLabel("Estimated mileage: --", "#AAAAAA")
+        estimatedMileageText = createLabel("Current cycle mileage: --", "#AAAAAA")
         fuelCard.addView(estimatedMileageText, wrapParams())
 
-        confirmedMileageText = createLabel("Confirmed mileage: --", "#AAAAAA")
+        confirmedMileageText = createLabel("Historical confirmed mileage: --", "#AAAAAA")
         fuelCard.addView(confirmedMileageText, wrapParams())
 
         belowReserveButton = createAction("BELOW RESERVE — TAP TO MARK")
@@ -247,7 +247,7 @@ class MainActivity : Activity() {
         addDrawerItem(drawer, "SETTINGS") { openActivity(SettingsActivity::class.java) }
         addDrawerItem(drawer, "EXPORT") { openActivity(ExportActivity::class.java) }
         addSpace(drawer, 25)
-        drawer.addView(createLabel("Background Odometer V19", "#777777"), wrapParams())
+        drawer.addView(createLabel("Background Odometer V32", "#777777"), wrapParams())
         return drawer
     }
 
@@ -802,18 +802,20 @@ class MainActivity : Activity() {
                 "Range: --"
             }
 
+        val currentCycleMileage = database.getCurrentCycleMileage()
+
         estimatedMileageText.text =
-            if (estimatedMileage > 0.0) {
-                "Estimated mileage: %.2f km/L".format(estimatedMileage)
+            if (currentCycleMileage > 0.0) {
+                "Current cycle mileage: %.2f km/L".format(currentCycleMileage)
             } else {
-                "Estimated mileage: --"
+                "Current cycle mileage: --"
             }
 
         confirmedMileageText.text =
             if (confirmedMileage > 0.0) {
-                "Confirmed mileage: %.2f km/L".format(confirmedMileage)
+                "Historical confirmed mileage: %.2f km/L".format(confirmedMileage)
             } else {
-                "Confirmed mileage: --"
+                "Historical confirmed mileage: --"
             }
 
         val autoBelow = database.isReserveReachedByCalculation()
