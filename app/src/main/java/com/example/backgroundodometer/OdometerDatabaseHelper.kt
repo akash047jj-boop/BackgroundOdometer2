@@ -1873,6 +1873,28 @@ class OdometerDatabaseHelper(
         }
     }
 
+    /**
+     * Mileage for the active FULL-to-current-fuel cycle.
+     * Includes partial top-ups since the latest FULL event.
+     * Returns zero when the fuel level cannot be reconstructed.
+     */
+    fun getCurrentCycleMileage(): Double {
+        val records = getFuelRecords().sortedBy { it.time }
+        val latestFull = records.lastOrNull {
+            it.litresAdded > 0.0 && it.tankLevel.equals("FULL", true)
+        } ?: return 0.0
+
+        val currentFuel = getCurrentFuel() ?: return 0.0
+        val distance = getTotalOdometer() - latestFull.odometerKm
+        if (distance <= 0.0) return 0.0
+
+        val topUpsSinceFull = records
+            .filter { it.time > latestFull.time && it.litresAdded > 0.0 }
+            .sumOf { it.litresAdded }
+        val fuelConsumed = getTankCapacity() + topUpsSinceFull - currentFuel
+        return if (fuelConsumed > 0.05) distance / fuelConsumed else 0.0
+    }
+
     fun getAverageMileage(): Double = getConfirmedMileage()
 
     fun getBestMileage(): Double {
