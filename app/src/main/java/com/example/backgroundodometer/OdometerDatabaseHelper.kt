@@ -1441,7 +1441,8 @@ class OdometerDatabaseHelper(
             // the tank remains below reserve. BELOW describes the resulting
             // reserve status; it must not discard the arithmetic fuel level.
             before != null -> (before + litres).coerceIn(0.0, capacity)
-            normalizedStatus == "BELOW" -> -1.0
+            // Without a known starting fuel level, a partial refill cannot
+            // establish the exact resulting level or reserve status.
             else -> -1.0
         }
 
