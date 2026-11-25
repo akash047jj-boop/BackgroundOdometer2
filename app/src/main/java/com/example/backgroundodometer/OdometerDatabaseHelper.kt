@@ -1528,29 +1528,37 @@ class OdometerDatabaseHelper(
         }
 
         val markerCursor = readableDatabase.rawQuery(
-            "SELECT litres_added, fuel_status FROM fuel_records WHERE id = ?",
+            "SELECT litres_added, fuel_status, fuel_after_litres FROM fuel_records WHERE id = ?",
             arrayOf(id.toString())
         )
         var isMarker = false
+        var oldLitres = 0.0
+        var oldFuelAfter = -1.0
         markerCursor.use {
             if (it.moveToFirst()) {
-                isMarker = it.getDouble(0) <= 0.0 &&
+                oldLitres = it.getDouble(0)
+                isMarker = oldLitres <= 0.0 &&
                     (it.getString(1) ?: "").equals("BELOW", true)
+                oldFuelAfter = it.getDouble(2)
             }
         }
         if (isMarker) return false
 
+        val normalizedTank = if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
+        val adjustedFuelAfter = when {
+            normalizedTank == "FULL" -> getTankCapacity()
+            oldFuelAfter >= 0.0 -> (oldFuelAfter + litres - oldLitres).coerceIn(0.0, getTankCapacity())
+            else -> -1.0
+        }
         val values = ContentValues()
         values.put("litres_added", litres)
         values.put("note", note)
+        values.put("fuel_after_litres", adjustedFuelAfter)
         values.put(
             "fuel_status",
-            if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE"
+            if (adjustedFuelAfter >= 0.0 && adjustedFuelAfter <= getReserveFuel()) "BELOW" else "ABOVE"
         )
-        values.put(
-            "tank_level",
-            if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
-        )
+        values.put("tank_level", normalizedTank)
 
         val changed = writableDatabase.update(
             TABLE_FUEL,
