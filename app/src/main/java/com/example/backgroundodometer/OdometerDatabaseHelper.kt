@@ -1429,8 +1429,6 @@ class OdometerDatabaseHelper(
         val capacity = getTankCapacity()
         val reserve = getReserveFuel()
 
-        val normalizedStatus =
-            if (fuelStatus.equals("BELOW", true)) "BELOW" else "ABOVE"
         val normalizedTank =
             if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
 
@@ -1447,6 +1445,9 @@ class OdometerDatabaseHelper(
             else -> -1.0
         }
 
+        val resultingStatus =
+            if (after >= 0.0 && after <= reserve) "BELOW" else "ABOVE"
+
         val values = ContentValues()
         values.put("time", System.currentTimeMillis())
         values.put("odometer_km", getTotalOdometer())
@@ -1454,7 +1455,7 @@ class OdometerDatabaseHelper(
         values.put("fuel_after_litres", after)
         values.put("note", note)
         values.put("reserve_crossed", 0)
-        values.put("fuel_status", normalizedStatus)
+        values.put("fuel_status", resultingStatus)
         values.put("tank_level", normalizedTank)
 
         writableDatabase.insert(TABLE_FUEL, null, values)
@@ -1923,8 +1924,13 @@ class OdometerDatabaseHelper(
         val fuelAdded = records
             .filter { it.time > latestMarker.time && it.litresAdded > 0.0 }
             .sumOf { it.litresAdded }
-        val fuelStillAboveReserve = maxOf(0.0, currentFuel - getReserveFuel())
-        val fuelConsumed = fuelAdded - fuelStillAboveReserve
+
+        // A reserve-to-reserve cycle starts with the configured reserve amount.
+        // Fuel added after that checkpoint is still in the tank until consumed.
+        // Therefore consumed fuel = starting reserve + all added fuel - current
+        // remaining fuel. Do not clamp current fuel to "above reserve" here:
+        // partial refuelling may leave the tank below reserve.
+        val fuelConsumed = getReserveFuel() + fuelAdded - currentFuel
         return if (fuelConsumed > 0.05) distance / fuelConsumed else 0.0
     }
 
@@ -2014,9 +2020,8 @@ class OdometerDatabaseHelper(
      * the calculated fuel level actually reaches reserve.
      */
     fun getCurrentFuelStatus(): String {
-        val latest = getFuelRecords().firstOrNull()
-        if (latest?.fuelStatus?.equals("BELOW", true) == true) return "BELOW"
-        return if (isReserveReachedByCalculation()) "BELOW" else "ABOVE"
+        val fuel = getCurrentFuel() ?: return "UNKNOWN"
+        return if (fuel <= getReserveFuel()) "BELOW" else "ABOVE"
     }
 
     fun isReserveReached(): Boolean = getCurrentFuelStatus() == "BELOW"
