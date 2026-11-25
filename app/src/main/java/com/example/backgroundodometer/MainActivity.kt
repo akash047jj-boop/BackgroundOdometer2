@@ -792,17 +792,14 @@ class MainActivity : Activity() {
             "-- / %.2f L".format(tank)
         }
         val confirmedMileage = database.getConfirmedMileage()
-        val estimatedMileage = database.getEstimatedMileage()
-        val bestMileage = database.getBestMileage()
+        val currentCycleMileage = database.getCurrentCycleMileage()
 
         rangeText.text =
-            if (bestMileage > 0.0) {
+            if (currentCycleMileage > 0.0) {
                 "Range: %.1f km".format(database.getOverallRange())
             } else {
                 "Range: --"
             }
-
-        val currentCycleMileage = database.getCurrentCycleMileage()
 
         estimatedMileageText.text =
             if (currentCycleMileage > 0.0) {
