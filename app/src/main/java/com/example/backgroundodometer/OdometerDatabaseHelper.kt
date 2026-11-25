@@ -1935,13 +1935,16 @@ class OdometerDatabaseHelper(
     }
 
     fun getOverallRange(): Double {
-        val mileage = getConfirmedMileage()
+        // Range is based on the active reserve-to-reserve cycle mileage.
+        val mileage = getCurrentCycleMileage()
         val fuel = getCurrentFuel() ?: return 0.0
         return if (mileage > 0.0) fuel * mileage else 0.0
     }
 
     fun getRangeToReserve(): Double {
-        val mileage = getConfirmedMileage()
+        // Estimate distance available before reaching the reserve level,
+        // using the same current-cycle mileage as the overall range.
+        val mileage = getCurrentCycleMileage()
         val fuel = getCurrentFuel() ?: return 0.0
         val available = maxOf(0.0, fuel - getReserveFuel())
         return if (mileage > 0.0) available * mileage else 0.0
