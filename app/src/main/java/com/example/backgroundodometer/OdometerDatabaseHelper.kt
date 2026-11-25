@@ -1428,34 +1428,35 @@ class OdometerDatabaseHelper(
         val before = getCurrentFuel()
         val capacity = getTankCapacity()
         val reserve = getReserveFuel()
+        val normalizedTank = if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
 
-        val normalizedTank =
-            if (tankLevel.equals("FULL", true)) "FULL" else "PARTIAL"
-
-        // A fuel level is only stored when it is actually knowable.
-        // We deliberately do NOT estimate fuel remaining from the estimated
-        // mileage. Until a confirmed mileage reference exists, the value is unknown.
+        // Store the amount that actually entered the tank. A FULL entry is an
+        // exact capacity reference and cannot exceed the configured capacity.
+        val effectiveAdded = when {
+            normalizedTank == "FULL" && before != null ->
+                (capacity - before).coerceAtLeast(0.0)
+            normalizedTank == "FULL" -> litres.coerceAtMost(capacity)
+            before != null -> litres.coerceAtMost((capacity - before).coerceAtLeast(0.0))
+            else -> litres
+        }
         val after: Double = when {
             normalizedTank == "FULL" -> capacity
-            // A partial refill still increases the known fuel level even when
-            // the tank remains below reserve. BELOW describes the resulting
-            // reserve status; it must not discard the arithmetic fuel level.
-            before != null -> (before + litres).coerceIn(0.0, capacity)
-            // Without a known starting fuel level, a partial refill cannot
-            // establish the exact resulting level or reserve status.
+            before != null -> (before + effectiveAdded).coerceIn(0.0, capacity)
             else -> -1.0
         }
 
-        val resultingStatus =
-            if (after >= 0.0 && after <= reserve) "BELOW" else "ABOVE"
-
+        // This flag records the precise refill that first moved the known level
+        // from at/below reserve to above reserve. It is the start of a mileage
+        // measurement; refills that remain below reserve are not mileage starts.
+        val crossedAbove = before != null && before <= reserve && after > reserve
+        val resultingStatus = if (after >= 0.0 && after <= reserve) "BELOW" else "ABOVE"
         val values = ContentValues()
         values.put("time", System.currentTimeMillis())
         values.put("odometer_km", getTotalOdometer())
-        values.put("litres_added", litres)
+        values.put("litres_added", effectiveAdded)
         values.put("fuel_after_litres", after)
         values.put("note", note)
-        values.put("reserve_crossed", 0)
+        values.put("reserve_crossed", if (crossedAbove) 1 else 0)
         values.put("fuel_status", resultingStatus)
         values.put("tank_level", normalizedTank)
 
@@ -1671,10 +1672,8 @@ class OdometerDatabaseHelper(
     }
 
     private fun recalculateLatestReserveCrossed() {
-        // Reserve-crossing is now represented by the explicit rider marker or
-        // by the current confirmed fuel calculation. No estimated-mileage
-        // inference is used here.
-        writableDatabase.execSQL("UPDATE fuel_records SET reserve_crossed = 0")
+        // reserve_crossed is a historical event: preserve the recorded refill
+        // that moved the level above reserve. Do not erase it during edits.
     }
 
     /**
@@ -1898,49 +1897,30 @@ class OdometerDatabaseHelper(
      */
     fun getCurrentCycleMileage(): Double {
         val records = getFuelRecords().sortedBy { it.time }
-        val reserveMarkers = records.filter {
+        val markers = records.filter {
             it.litresAdded <= 0.0 && it.fuelStatus.equals("BELOW", true)
         }
-        val latestMarker = reserveMarkers.lastOrNull() ?: return 0.0
-        val previousMarker = reserveMarkers.dropLast(1).lastOrNull()
-        val latestRecord = records.lastOrNull() ?: return 0.0
+        val latestMarker = markers.lastOrNull() ?: return 0.0
+        val previousMarker = markers.dropLast(1).lastOrNull()
+        val lowerTime = previousMarker?.time ?: Long.MIN_VALUE
 
-        // If the latest event is a reserve marker, show the just-completed
-        // reserve-to-reserve cycle.
-        if (latestRecord.id == latestMarker.id) {
-            previousMarker ?: return 0.0
-            val distance = latestMarker.odometerKm - previousMarker.odometerKm
-            val fuelUsed = records
-                .filter {
-                    it.time > previousMarker.time &&
-                        it.time <= latestMarker.time &&
-                        it.litresAdded > 0.0
-                }
-                .sumOf { it.litresAdded }
-            return if (distance > 0.0 && fuelUsed > 0.05) {
-                distance / fuelUsed
-            } else {
-                0.0
-            }
-        }
+        // Current mileage is only confirmed when the rider marks BELOW RESERVE.
+        // Start at the most recent refill that actually crossed from <= reserve
+        // to > reserve. A refill that leaves the tank below reserve is ignored.
+        val crossing = records.lastOrNull {
+            it.time > lowerTime &&
+                it.time < latestMarker.time &&
+                it.reserveCrossed
+        } ?: return 0.0
 
-        // Otherwise calculate the active cycle since the most recent reserve
-        // checkpoint. The remaining fuel above reserve has not yet been consumed.
-        val currentFuel = getCurrentFuel() ?: return 0.0
-        val distance = getTotalOdometer() - latestMarker.odometerKm
-        if (distance <= 0.0) return 0.0
+        val distance = latestMarker.odometerKm - crossing.odometerKm
+        val fuelUsed = records.filter {
+            it.time >= crossing.time &&
+                it.time < latestMarker.time &&
+                it.litresAdded > 0.0
+        }.sumOf { it.litresAdded }
 
-        val fuelAdded = records
-            .filter { it.time > latestMarker.time && it.litresAdded > 0.0 }
-            .sumOf { it.litresAdded }
-
-        // A reserve-to-reserve cycle starts with the configured reserve amount.
-        // Fuel added after that checkpoint is still in the tank until consumed.
-        // Therefore consumed fuel = starting reserve + all added fuel - current
-        // remaining fuel. Do not clamp current fuel to "above reserve" here:
-        // partial refuelling may leave the tank below reserve.
-        val fuelConsumed = getReserveFuel() + fuelAdded - currentFuel
-        return if (fuelConsumed > 0.05) distance / fuelConsumed else 0.0
+        return if (distance > 0.0 && fuelUsed > 0.05) distance / fuelUsed else 0.0
     }
 
     fun getAverageMileage(): Double = getConfirmedMileage()
@@ -1999,14 +1979,16 @@ class OdometerDatabaseHelper(
 
         val now = System.currentTimeMillis()
         val reserveFuel = getReserveFuel()
-        /*
-         * A rider manually marking BELOW RESERVE confirms the bike has reached
-         * the reserve point. Save the configured reserve amount as the exact
-         * checkpoint regardless of the calculated estimate at that moment.
-         * Example: if the estimate reads 3.06 L and reserve is 3.20 L, the
-         * confirmed reserve checkpoint must display 3.20 L, not 3.06 L.
-         */
-        val markerFuel = reserveFuel
+        // The rider's BELOW confirmation is authoritative. If the calculated
+        // level is already below reserve (e.g. 2.9 L with a 3.0 L reserve),
+        // preserve that actual level. Only normalize to the reserve boundary
+        // when the estimate is still above it.
+        val observedFuel = getCurrentFuel()
+        val markerFuel = if (observedFuel != null && observedFuel <= reserveFuel) {
+            observedFuel
+        } else {
+            reserveFuel
+        }
         val values = ContentValues()
         values.put("time", now)
         values.put("odometer_km", getTotalOdometer())
