@@ -288,117 +288,20 @@ class MainActivity : Activity() {
         litres.inputType = 2 or 8192
         layout.addView(litres, wrapParams())
 
-        val statusLabel = createLabel(
-            "FUEL STATUS AFTER REFUELLING",
-            "#AAAAAA"
-        )
-        statusLabel.textSize = 13f
-        layout.addView(statusLabel, wrapParams())
-
-        val statusGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.HORIZONTAL
-        }
-
-        val aboveRadio = RadioButton(this).apply {
-            text = "ABOVE RESERVE"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
-        }
-
-        val belowRadio = RadioButton(this).apply {
-            text = "BELOW RESERVE"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
-        }
-
-        statusGroup.addView(
-            aboveRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-        statusGroup.addView(
-            belowRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-
-        statusGroup.check(
-            if (database.isReserveReached()) {
-                belowRadio.id
-            } else {
-                aboveRadio.id
-            }
-        )
-        layout.addView(statusGroup, wrapParams())
-
-        val tankLabel = createLabel(
-            "TANK LEVEL AFTER REFUELLING",
-            "#AAAAAA"
-        )
+        val tankLabel = createLabel("TANK LEVEL AFTER REFUELLING", "#AAAAAA")
         tankLabel.textSize = 13f
         layout.addView(tankLabel, wrapParams())
 
-        val tankGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.HORIZONTAL
-        }
-
+        val tankGroup = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
         val partialRadio = RadioButton(this).apply {
-            text = "PARTIAL"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
+            text = "PARTIAL"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
         }
-
         val fullRadio = RadioButton(this).apply {
-            text = "FULL TANK"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
+            text = "FULL TANK"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
         }
-
-        tankGroup.addView(
-            partialRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-        tankGroup.addView(
-            fullRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
+        tankGroup.addView(partialRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tankGroup.addView(fullRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         tankGroup.check(partialRadio.id)
-
-        fun syncTankChoices() {
-            val belowSelected =
-                statusGroup.checkedRadioButtonId == belowRadio.id
-
-            fullRadio.isEnabled = !belowSelected
-            fullRadio.alpha = if (belowSelected) 0.45f else 1f
-
-            if (belowSelected && tankGroup.checkedRadioButtonId == fullRadio.id) {
-                tankGroup.check(partialRadio.id)
-            }
-        }
-
-        statusGroup.setOnCheckedChangeListener { _, _ ->
-            syncTankChoices()
-        }
-        syncTankChoices()
-
         layout.addView(tankGroup, wrapParams())
 
         val note = EditText(this)
@@ -411,45 +314,12 @@ class MainActivity : Activity() {
             .setNegativeButton("CANCEL", null)
             .setPositiveButton("ADD") { _, _ ->
                 val amount = litres.text.toString().toDoubleOrNull()
-
                 if (amount == null || amount <= 0) {
-                    Toast.makeText(
-                        this,
-                        "Enter valid litres",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, "Enter valid litres", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
-                val status =
-                    if (statusGroup.checkedRadioButtonId == belowRadio.id) {
-                        "BELOW"
-                    } else {
-                        "ABOVE"
-                    }
-
-                val tankLevel =
-                    if (tankGroup.checkedRadioButtonId == fullRadio.id) {
-                        "FULL"
-                    } else {
-                        "PARTIAL"
-                    }
-
-                if (status == "BELOW" && tankLevel == "FULL") {
-                    Toast.makeText(
-                        this,
-                        "A tank marked BELOW RESERVE cannot also be FULL.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@setPositiveButton
-                }
-
-                database.addFuel(
-                    amount,
-                    note.text.toString(),
-                    status,
-                    tankLevel
-                )
+                val tankLevel = if (tankGroup.checkedRadioButtonId == fullRadio.id) "FULL" else "PARTIAL"
+                database.addFuel(amount, note.text.toString(), tankLevel = tankLevel)
                 refreshData()
             }
             .show()
@@ -537,17 +407,11 @@ class MainActivity : Activity() {
     }
 
     private fun showEditFuelDialog(record: FuelRecord) {
-        val isMarker =
-            record.litresAdded <= 0.0 &&
-                record.fuelStatus.equals("BELOW", true)
-
+        val isMarker = record.litresAdded <= 0.0 && record.fuelStatus.equals("BELOW", true)
         if (isMarker) {
             AlertDialog.Builder(this)
                 .setTitle("BELOW RESERVE MARKER")
-                .setMessage(
-                    "This is a mileage reference point. " +
-                        "It cannot be edited as a fuel refill."
-                )
+                .setMessage("This is a mileage reference point. It cannot be edited as a fuel refill.")
                 .setPositiveButton("OK", null)
                 .show()
             return
@@ -558,131 +422,30 @@ class MainActivity : Activity() {
         layout.setPadding(30, 10, 30, 10)
 
         val litres = EditText(this)
+        litres.hint = "Litres added"
         litres.setText(record.litresAdded.toString())
         litres.inputType = 2 or 8192
         layout.addView(litres, wrapParams())
 
-        val statusLabel = createLabel(
-            "FUEL STATUS AFTER REFUELLING",
-            "#AAAAAA"
-        )
-        statusLabel.textSize = 13f
-        layout.addView(statusLabel, wrapParams())
-
-        val statusGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.HORIZONTAL
-        }
-
-        val aboveRadio = RadioButton(this).apply {
-            text = "ABOVE RESERVE"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
-        }
-
-        val belowRadio = RadioButton(this).apply {
-            text = "BELOW RESERVE"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
-        }
-
-        statusGroup.addView(
-            aboveRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-        statusGroup.addView(
-            belowRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-        statusGroup.check(
-            if (record.fuelStatus == "BELOW") {
-                belowRadio.id
-            } else {
-                aboveRadio.id
-            }
-        )
-        layout.addView(statusGroup, wrapParams())
-
-        val tankLabel = createLabel(
-            "TANK LEVEL AFTER REFUELLING",
-            "#AAAAAA"
-        )
+        val tankLabel = createLabel("TANK LEVEL AFTER REFUELLING", "#AAAAAA")
         tankLabel.textSize = 13f
         layout.addView(tankLabel, wrapParams())
 
-        val tankGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.HORIZONTAL
-        }
-
+        val tankGroup = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
         val partialRadio = RadioButton(this).apply {
-            text = "PARTIAL"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
+            text = "PARTIAL"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
         }
-
         val fullRadio = RadioButton(this).apply {
-            text = "FULL TANK"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            id = View.generateViewId()
+            text = "FULL TANK"; textSize = 13f; setTextColor(Color.WHITE); id = View.generateViewId()
         }
-
-        tankGroup.addView(
-            partialRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-        tankGroup.addView(
-            fullRadio,
-            LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-
-        tankGroup.check(
-            if (record.tankLevel == "FULL") {
-                fullRadio.id
-            } else {
-                partialRadio.id
-            }
-        )
-
-        fun syncTankChoices() {
-            val belowSelected =
-                statusGroup.checkedRadioButtonId == belowRadio.id
-
-            fullRadio.isEnabled = !belowSelected
-            fullRadio.alpha = if (belowSelected) 0.45f else 1f
-
-            if (belowSelected && tankGroup.checkedRadioButtonId == fullRadio.id) {
-                tankGroup.check(partialRadio.id)
-            }
-        }
-
-        statusGroup.setOnCheckedChangeListener { _, _ ->
-            syncTankChoices()
-        }
-        syncTankChoices()
-
+        tankGroup.addView(partialRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tankGroup.addView(fullRadio, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tankGroup.check(if (record.tankLevel == "FULL") fullRadio.id else partialRadio.id)
         layout.addView(tankGroup, wrapParams())
 
         val note = EditText(this)
         note.setText(record.note)
+        note.hint = "Note (optional)"
         layout.addView(note, wrapParams())
 
         AlertDialog.Builder(this)
@@ -691,38 +454,16 @@ class MainActivity : Activity() {
             .setNegativeButton("CANCEL", null)
             .setPositiveButton("SAVE") { _, _ ->
                 val value = litres.text.toString().toDoubleOrNull()
-
                 if (value == null || value <= 0) {
-                    Toast.makeText(
-                        this,
-                        "Enter valid litres",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, "Enter valid litres", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
-                val status =
-                    if (statusGroup.checkedRadioButtonId == belowRadio.id) {
-                        "BELOW"
-                    } else {
-                        "ABOVE"
-                    }
-
-                val tankLevel =
-                    if (tankGroup.checkedRadioButtonId == fullRadio.id) {
-                        "FULL"
-                    } else {
-                        "PARTIAL"
-                    }
-
-                database.updateFuel(
-                    record.id,
-                    value,
-                    note.text.toString(),
-                    status,
-                    tankLevel
-                )
-                refreshData()
+                val tankLevel = if (tankGroup.checkedRadioButtonId == fullRadio.id) "FULL" else "PARTIAL"
+                if (database.updateFuel(record.id, value, note.text.toString(), tankLevel = tankLevel)) {
+                    Toast.makeText(this, "Fuel record updated", Toast.LENGTH_SHORT).show()
+                    refreshData()
+                    showFuelHistory()
+                }
             }
             .show()
     }
@@ -818,10 +559,10 @@ class MainActivity : Activity() {
         val autoBelow = database.isReserveReachedByCalculation()
         val userStatus = database.getCurrentFuelStatus()
         val below = userStatus == "BELOW" || autoBelow
-        val currentStatus = when {
-            userStatus == "BELOW" -> "BELOW RESERVE"
-            autoBelow -> "BELOW RESERVE • AUTO DETECTED"
-            else -> "ABOVE RESERVE"
+        val currentStatus = when (userStatus) {
+            "BELOW" -> "BELOW RESERVE • AUTO DETECTED"
+            "ABOVE" -> "ABOVE RESERVE"
+            else -> "FUEL LEVEL UNKNOWN"
         }
         reserveStatusText.text = currentStatus
         reserveStatusText.background = statusBackground(below)
