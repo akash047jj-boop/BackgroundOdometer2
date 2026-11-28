@@ -104,6 +104,7 @@ class MainActivity : Activity() {
 
         val title = createTitle("BACKGROUND ODOMETER")
         topBar.addView(title, wrapParams())
+        topBar.addView(createLabel("BIKE: ${BikeProfileManager.getActiveProfile(this).name}", GREEN), wrapParams())
 
         val menu = createMenuButton("☰  MENU")
         menu.textSize = 18f
@@ -690,6 +691,12 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Reopen against the currently selected bike database after returning
+        // from Settings/profile switching.
+        if (::database.isInitialized) {
+            database.close()
+            database = OdometerDatabaseHelper(this)
+        }
         val filter = IntentFilter().apply {
             addAction(LocationTrackingService.ACTION_SPEED_UPDATE)
             addAction(LocationTrackingService.ACTION_STATUS_UPDATE)
