@@ -54,7 +54,7 @@ class OdometerDatabaseHelper(
     context: Context
 ) : SQLiteOpenHelper(
     context,
-    "background_odometer.db",
+    BikeProfileManager.databaseName(context),
     null,
     8
 ) {
