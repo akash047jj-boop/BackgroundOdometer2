@@ -176,7 +176,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun confirmClearOdometer(){AlertDialog.Builder(this).setTitle("CLEAR TOTAL ODOMETER?").setMessage("The displayed total will become 0 km. Existing trips and routes remain saved.").setNegativeButton("CANCEL",null).setPositiveButton("CLEAR"){_,_->database.clearDisplayedOdometer();buildUi()}.show()}
-    private fun confirmDeleteAll(){AlertDialog.Builder(this).setTitle("DELETE ALL DATA?").setMessage("This permanently deletes all trips, route points, fuel records and saved settings. This cannot be undone.").setNegativeButton("CANCEL",null).setPositiveButton("DELETE EVERYTHING"){_,_->prefs.edit().clear().apply();database.deleteAllData();buildUi()}.show()}
+    private fun confirmDeleteAll(){AlertDialog.Builder(this).setTitle("DELETE ALL DATA?").setMessage("This permanently deletes all trips, route points, fuel records and saved settings for the active bike only. Bike profiles will remain available. This cannot be undone.").setNegativeButton("CANCEL",null).setPositiveButton("DELETE EVERYTHING"){_,_->database.deleteAllData();buildUi()}.show()}
     private fun openAppSettings(){try{startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply{data=Uri.parse("package:$packageName")})}catch(_:Exception){}}
     private fun openBatterySettings(){try{startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))}catch(_:Exception){openAppSettings()}}
 
