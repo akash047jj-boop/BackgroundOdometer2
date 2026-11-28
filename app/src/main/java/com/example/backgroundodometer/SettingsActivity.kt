@@ -32,6 +32,11 @@ class SettingsActivity : Activity() {
         root.addView(value("Scroll down for all settings"), params())
         space(root,20)
 
+        val activeProfile = BikeProfileManager.getActiveProfile(this)
+        section(root, "BIKE PROFILE", activeProfile.name)
+        root.addView(button("MANAGE BIKE PROFILES") { showBikeProfilesDialog() }, buttonParams())
+        space(root,22)
+
         section(root, "ODOMETER SPEED THRESHOLD", "%.1f km/h".format(database.getSpeedThreshold()))
         root.addView(button("CHANGE SPEED THRESHOLD") { showSpeedDialog() }, buttonParams())
         space(root,22)
@@ -71,6 +76,77 @@ class SettingsActivity : Activity() {
         root.addView(label(heading), params())
         root.addView(value(current), params())
         space(root,8)
+    }
+
+    private fun showBikeProfilesDialog() {
+        val profiles = BikeProfileManager.getProfiles(this)
+        val active = BikeProfileManager.getActiveProfile(this)
+        val labels = profiles.map { if (it.id == active.id) "${it.name}  ✓ (ACTIVE)" else it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("BIKE PROFILES")
+            .setSingleChoiceItems(labels, profiles.indexOfFirst { it.id == active.id }) { dialog, which ->
+                val selected = profiles[which]
+                dialog.dismiss()
+                if (selected.id != active.id) confirmProfileSwitch(selected)
+            }
+            .setPositiveButton("NEW PROFILE") { _, _ -> showCreateProfileDialog() }
+            .setNeutralButton("RENAME ACTIVE") { _, _ -> showRenameProfileDialog() }
+            .setNegativeButton("CLOSE", null)
+            .show()
+    }
+
+    private fun showCreateProfileDialog() {
+        val input = EditText(this).apply { hint = "e.g. Pulsar NS200"; setSingleLine(true) }
+        AlertDialog.Builder(this)
+            .setTitle("CREATE BIKE PROFILE")
+            .setMessage("A new, empty profile will be created. Trips, fuel history, odometer and settings will start from zero/defaults.")
+            .setView(input)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("CREATE") { _, _ ->
+                val profile = BikeProfileManager.createProfile(this, input.text.toString())
+                if (profile == null) {
+                    Toast.makeText(this, "Enter a profile name.", Toast.LENGTH_SHORT).show()
+                } else {
+                    confirmProfileSwitch(profile, isNew = true)
+                }
+            }.show()
+    }
+
+    private fun showRenameProfileDialog() {
+        val active = BikeProfileManager.getActiveProfile(this)
+        val input = EditText(this).apply { setSingleLine(true); setText(active.name) }
+        AlertDialog.Builder(this)
+            .setTitle("RENAME BIKE PROFILE")
+            .setView(input)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("SAVE") { _, _ ->
+                if (BikeProfileManager.renameProfile(this, active.id, input.text.toString())) {
+                    buildUi()
+                } else {
+                    Toast.makeText(this, "Enter a valid name.", Toast.LENGTH_SHORT).show()
+                }
+            }.show()
+    }
+
+    private fun confirmProfileSwitch(profile: BikeProfile, isNew: Boolean = false) {
+        val active = BikeProfileManager.getActiveProfile(this)
+        AlertDialog.Builder(this)
+            .setTitle(if (isNew) "START NEW BIKE PROFILE?" else "SWITCH BIKE PROFILE?")
+            .setMessage("Switch from \"${active.name}\" to \"${profile.name}\"? Each profile has its own trips, odometer, fuel records, fuel calculations and settings. Your existing profile data will remain saved.")
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton(if (isNew) "START PROFILE" else "SWITCH") { _, _ ->
+                val wasTracking = prefs.getBoolean("auto_tracking_enabled", false)
+                prefs.edit().putBoolean("auto_tracking_enabled", false).apply()
+                if (wasTracking) {
+                    try {
+                        startService(Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_STOP))
+                    } catch (_: Exception) { }
+                }
+                database.close()
+                BikeProfileManager.setActiveProfile(this, profile.id)
+                Toast.makeText(this, "Active bike: ${profile.name}", Toast.LENGTH_SHORT).show()
+                finish()
+            }.show()
     }
 
     private fun showFuelSettingsDialog() {
